@@ -1,8 +1,17 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, dirname, join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -24,7 +33,6 @@ import {
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const CLI = join(ROOT, 'bin', 'ultramod.mjs');
-const NODE_DIR = dirname(process.execPath);
 const POSIX = process.platform !== 'win32';
 
 const STUB = [
@@ -58,42 +66,62 @@ const STUB = [
 
 let workDir;
 let stubBin;
+let nodeBin;
 let homeDir;
 let logSeq = 0;
 
 before(() => {
   workDir = mkdtempSync(join(tmpdir(), 'ultramod-installer-'));
   stubBin = join(workDir, 'bin');
+  nodeBin = join(workDir, 'node-bin');
   homeDir = join(workDir, 'home');
   mkdirSync(stubBin, { recursive: true });
+  mkdirSync(nodeBin, { recursive: true });
   mkdirSync(homeDir, { recursive: true });
   const stub = join(stubBin, 'claude');
   writeFileSync(stub, STUB);
   chmodSync(stub, 0o755);
+  // The real node bin dir can hold a global claude (it does on CI), so every
+  // PATH below points at this private dir instead: node, nothing else.
+  if (POSIX) {
+    symlinkSync(process.execPath, join(nodeBin, 'node'));
+  } else {
+    copyFileSync(process.execPath, join(nodeBin, 'node.exe'));
+  }
 });
 
 after(() => {
   if (workDir) rmSync(workDir, { recursive: true, force: true });
 });
 
+// PATH is only ever the private node dir, plus the stub dir when a test wants
+// the stub. The real node bin dir is never in it, so no test can reach a real
+// claude, whatever else is installed on the machine.
+function baseEnv(extra = {}) {
+  return {
+    ...process.env,
+    PATH: nodeBin,
+    HOME: homeDir,
+    USERPROFILE: homeDir,
+    NO_COLOR: '1',
+    ...extra,
+  };
+}
+
 function stubEnv(extra = {}) {
   logSeq += 1;
   const log = join(workDir, `calls-${logSeq}.log`);
   return {
     log,
-    env: {
-      ...process.env,
-      PATH: POSIX ? `${stubBin}${delimiter}${NODE_DIR}` : NODE_DIR,
+    env: baseEnv({
+      PATH: POSIX ? `${stubBin}${delimiter}${nodeBin}` : nodeBin,
       STUB_LOG: log,
-      HOME: homeDir,
-      USERPROFILE: homeDir,
-      NO_COLOR: '1',
       ...extra,
-    },
+    }),
   };
 }
 
-function runCli(args, env) {
+function runCli(args, env = baseEnv()) {
   const result = spawnSync(process.execPath, [CLI, ...args], {
     encoding: 'utf8',
     cwd: ROOT,
@@ -321,7 +349,7 @@ test('invocation leaves POSIX commands alone', () => {
 
 test('install --dry-run without claude prints a fresh plan and exits 0', () => {
   const { env, log } = stubEnv();
-  const result = runCli(['install', '--dry-run'], { ...env, PATH: NODE_DIR });
+  const result = runCli(['install', '--dry-run'], { ...env, PATH: nodeBin });
   assert.equal(result.status, 0);
   assert.deepEqual(lines(result.stdout), [
     'claude not found on PATH; showing a fresh install plan.',
@@ -371,7 +399,7 @@ test('install refuses a claude older than the mods floor', { skip: !POSIX }, () 
 
 test('install fails with setup instructions when claude is missing', () => {
   const { env } = stubEnv();
-  const result = runCli(['install'], { ...env, PATH: NODE_DIR });
+  const result = runCli(['install'], { ...env, PATH: nodeBin });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Claude Code not found on PATH/);
   assert.match(result.stderr, /https:\/\/code\.claude\.com\/docs\/en\/setup/);
