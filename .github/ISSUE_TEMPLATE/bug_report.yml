@@ -1,0 +1,65 @@
+name: Bug report
+description: Report something that did not work as expected
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. The last two fields are the ones that let us reproduce a
+        problem without asking follow-up questions.
+  - type: input
+    id: claude-version
+    attributes:
+      label: Claude Code version
+      description: Output of `claude --version`.
+      placeholder: 2.1.292
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: Name and version.
+      placeholder: Ubuntu 24.04, macOS 15.6, Windows 11
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal
+      description: Which terminal you run Claude Code in.
+      placeholder: iTerm2, Windows Terminal, VS Code terminal, tmux
+    validations:
+      required: true
+  - type: dropdown
+    id: set
+    attributes:
+      label: Set
+      description: The active set when the problem happened (`/ultra sets`).
+      options:
+        - essentials
+        - strict
+        - flow
+        - marathon
+        - quiet
+        - customised or unknown
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+      placeholder: I ran ... and expected ... but ...
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "/ultra doctor output"
+      description: Paste the full output of `/ultra doctor`.
+      render: shell
+    validations:
+      required: true

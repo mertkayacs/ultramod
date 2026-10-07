@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm i -g @anthropic-ai/claude-code@2.1.292
+      - run: npm run check
+      - run: npm run installer:test
+      - name: Extract release notes from CHANGELOG
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $1 == "##" { keep = ($2 == v); if (keep) next }
+            keep { print }
+          ' CHANGELOG.md > .release-notes.md
+          if [ ! -s .release-notes.md ]; then
+            echo "CHANGELOG.md has no '## $version' section." >&2
+            exit 1
+          fi
+      - run: npm i -g npm@latest
+      - name: Publish to npm
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if npm view "ultramod@$version" version >/dev/null 2>&1; then
+            echo "ultramod@$version is already on npm; skipping publish."
+            exit 0
+          fi
+          if npm publish --access public --provenance; then
+            exit 0
+          fi
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "Trusted publishing is not configured and no NPM_TOKEN secret exists." >&2
+            exit 1
+          fi
+          echo "Trusted publishing is not configured, retrying with NPM_TOKEN."
+          npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
+          npm publish --access public --provenance
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME exists; skipping."
+            exit 0
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file .release-notes.md

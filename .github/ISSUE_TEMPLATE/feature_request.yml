@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest a mod, set, command or improvement
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ultra Mod aims to stay small: a few mods that earn their place, zero network calls,
+        and no token cost unless the mod reports something.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that the current mods do not cover?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should the mod do, and where should it show up (HUD, receipts, pane, command)?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you have tried
+      description: Existing mods, sets, hooks or settings you already use for this.

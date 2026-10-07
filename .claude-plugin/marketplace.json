@@ -1,0 +1,17 @@
+{
+  "name": "ultramod",
+  "owner": {
+    "name": "Mert Kaya",
+    "url": "https://mertkayacs.com"
+  },
+  "description": "Claude Code mods for context, safety, and a receipt for every turn",
+  "plugins": [
+    {
+      "name": "ultramod",
+      "source": "./plugin",
+      "description": "Claude Code mods for context, safety, and a receipt for every turn",
+      "category": "development",
+      "tags": ["mods", "hooks", "context", "safety"]
+    }
+  ]
+}
