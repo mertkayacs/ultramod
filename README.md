@@ -46,6 +46,19 @@ Open Claude Code and type `/ultra`. The defaults work as they are; `/plugin conf
 
 Ultra Mod spends no model tokens on its own. `claude plugin details ultramod` reports about 0 always-on tokens. Pins adds your pinned lines to the system prompt, and compaction runs the normal `/compact` when you ask for it.
 
+## See it
+
+<table>
+  <tr>
+    <td width="50%"><img src="https://raw.githubusercontent.com/mertkayacs/ultramod/media/clips/receipt.gif" alt="The HUD above the prompt and a receipt under the answer: 1 cmd, tests passed, 6s, cost"><br><b>HUD and receipts.</b> Limits with reset times above the prompt, and what really ran under every answer.</td>
+    <td width="50%"><img src="https://raw.githubusercontent.com/mertkayacs/ultramod/media/clips/guard-undo.gif" alt="The guard holds git reset --hard, the user approves, and /ultra undo restores the discarded work"><br><b>Guard and undo.</b> <code>git reset --hard</code> waits for your yes, and <code>/ultra undo</code> brings the work back.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="https://raw.githubusercontent.com/mertkayacs/ultramod/media/clips/secrets.gif" alt="Claude tries to read .env through grep and Ultra Mod refuses it with instructions"><br><b>Secrets.</b> A read of <code>.env</code> is refused, and Claude is told what to do instead.</td>
+    <td width="50%"><img src="https://raw.githubusercontent.com/mertkayacs/ultramod/media/clips/sets.gif" alt="The /ultra control pane switches the set from essentials to strict"><br><b>Sets.</b> The <code>/ultra</code> pane switches the whole pack, here from essentials to strict.</td>
+  </tr>
+</table>
+
 ## Sets
 
 A set is a combination of mods tuned for one way of working. Switch with `/ultra set <name>`; Ultra Mod remembers the choice for each project folder.
