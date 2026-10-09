@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changes
+- guard, tests: neither mod answers a permission check any more. They used to turn the engine's `ask` into `allow` for a call you had approved in their own dialog; now Claude Code's own prompt can follow the Ultra Mod dialog
+- notify: the macOS and Windows notifiers run shipped scripts (`scripts/notify.applescript`, `scripts/notify.ps1`) instead of inline `osascript -e` and `powershell -Command` programs; under WSL the script path goes through `wslpath -w`
+- manifest: the `types` field is gone from `plugin.json` (the plugin directory rejects it); `npm run validate` still checks the state contract on a copy that names it
+
 ## 1.0.3 (2026-10-09)
 
 ### Fixes

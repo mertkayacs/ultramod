@@ -4,6 +4,7 @@ export type UltraEnvName = 'OS' | 'HOME' | 'USERPROFILE' | 'WSL_DISTRO_NAME' | '
 
 // Mods see only methods implemented by the facade.
 export type UltraApi = {
+  plugin: Pick<EngineInterface['plugin'], 'root'>
   ui: Pick<EngineInterface['ui'], 'ask' | 'toast' | 'status' | 'log' | 'invalidate' | 'open' | 'close' | 'resolve'>
   session: Pick<EngineInterface['session'], 'root' | 'cwd' | 'id' | 'usage' | 'model' | 'version' | 'compact'>
   process: Pick<EngineInterface['process'], 'run'>

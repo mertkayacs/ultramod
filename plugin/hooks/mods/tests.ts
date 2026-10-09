@@ -1,6 +1,5 @@
 import type { UltraApi } from '../core/api'
 import type { Args, Frozen } from 'claude-code'
-import { atom, read, update } from 'claude-code'
 import { resolveSet, settingsFor } from '../core/sets'
 import type { UltraMod } from '../core/mod'
 import type { UltraModSettings } from '../../types/index'
@@ -137,18 +136,6 @@ function markersAndDrops(path: string, before: string, after: string): string | 
   return `${path} ${reasons.join(' and ')}`
 }
 
-// Call ids the person allowed in this mod's dialog. The engine asks about the
-// same call right after, and tool.check answers that ask with allow. The key
-// is shared with guard, whose tool.check honors the same ids.
-const approved = atom({ plugin: 'ultramod', key: 'guard-approved' } as const, [] as string[])
-
-// Bounded: one id per approved call, oldest dropped past the limit.
-const KEEP_APPROVED = 32
-
-async function rememberApproved($: UltraApi, id: string): Promise<void> {
-  await update($, approved, ids => ids.includes(id) ? ids : [...ids, id].slice(-KEEP_APPROVED))
-}
-
 export const tests: UltraMod = {
   id: 'tests',
   hooks: {
@@ -182,24 +169,10 @@ export const tests: UltraMod = {
         if (answer !== 'Allow') {
           return { deny: `The edit was refused (${reason}). ${REFUSE_TEXT}` }
         }
-        // Recorded before next: the engine raises tool.check inside it.
-        if (e.tool_use_id !== undefined) {
-          try {
-            await rememberApproved($, e.tool_use_id)
-          } catch {
-            // The edit is allowed; a lost id only costs a second native dialog.
-          }
-        }
+        // The engine may still show its own prompt after this dialog. No
+        // tool.check hook here: a permission hook only passes the check on or
+        // answers a fixed deny or ask, never allow.
         return next(e)
-      },
-    }],
-    'tool.check': [{
-      run: async ($, e: Frozen<Args<'tool.check'>>, next) => {
-        const verdict = await next(e)
-        const id = e.tool_use_id
-        if (verdict.decision !== 'ask' || id === undefined) return verdict
-        const ids = await read($, approved)
-        return ids.includes(id) ? { decision: 'allow' } : verdict
       },
     }],
   },

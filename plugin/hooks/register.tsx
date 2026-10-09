@@ -17,7 +17,6 @@ function createApi($: EngineInterface): UltraApi {
         if (ref.key === 'turn') return $.state.get({ plugin: 'ultramod', key: 'turn' })
         if (ref.key === 'receipts') return $.state.get({ plugin: 'ultramod', key: 'receipts' })
         if (ref.key === 'allow') return $.state.get({ plugin: 'ultramod', key: 'allow' })
-        if (ref.key === 'guard-approved') return $.state.get({ plugin: 'ultramod', key: 'guard-approved' })
         if (ref.key === 'compact') return $.state.get({ plugin: 'ultramod', key: 'compact' })
         throw new Error('Ultra Mod state key is not declared in the facade.')
       }) as UltraApi['state']['get'],
@@ -28,10 +27,12 @@ function createApi($: EngineInterface): UltraApi {
         if (ref.key === 'turn') return $.state.set({ plugin: 'ultramod', key: 'turn' }, value as PluginState['ultramod']['turn'], options)
         if (ref.key === 'receipts') return $.state.set({ plugin: 'ultramod', key: 'receipts' }, value as PluginState['ultramod']['receipts'], options)
         if (ref.key === 'allow') return $.state.set({ plugin: 'ultramod', key: 'allow' }, value as PluginState['ultramod']['allow'], options)
-        if (ref.key === 'guard-approved') return $.state.set({ plugin: 'ultramod', key: 'guard-approved' }, value as PluginState['ultramod']['guard-approved'], options)
         if (ref.key === 'compact') return $.state.set({ plugin: 'ultramod', key: 'compact' }, value as PluginState['ultramod']['compact'], options)
         throw new Error('Ultra Mod state key is not declared in the facade.')
       }) as UltraApi['state']['set'],
+    },
+    plugin: {
+      get root() { return $.plugin.root },
     },
     store: {
       get: (...args: Parameters<UltraApi['store']['get']>) => $.store.get(...args),

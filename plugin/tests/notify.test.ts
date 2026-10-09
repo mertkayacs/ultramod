@@ -19,6 +19,7 @@ interface World {
   env: Record<string, string | undefined>
   blocked: boolean
   exits: Record<string, number>
+  pluginRoot: string
   // When set, clock.after queues its callback like the engine does until the dispatch has resolved.
   deferred: (() => void)[] | null
 }
@@ -34,6 +35,7 @@ function world(init: { env?: Record<string, string | undefined>; set?: unknown }
     env: { OS: 'Linux', ...init.env },
     blocked: false,
     exits: {},
+    pluginRoot: '/plugins/ultramod',
     deferred: null,
     $: null as unknown as UltraApi,
   }
@@ -54,11 +56,16 @@ function world(init: { env?: Record<string, string | undefined>; set?: unknown }
       resolve: () => { throw new Error('not needed') },
     },
     session: { root: async () => '/work/project', cwd: async () => '/work/project', id: async () => 's1', usage: async () => ({ startedAt: 0, context: { tokens: 0, window: 200000, percent: 1 }, rateLimits: [], cost: { usd: 0 } }), model: async () => 'claude-haiku-4.5', version: async () => ({ version: '2.1.292', base: '2.1.292', builtAt: '' }), compact: async () => ({}) },
+    plugin: { get root() { return w.pluginRoot } },
     process: {
       run: async (argv: readonly string[]) => {
         const name = argv[0] ?? ''
         w.argvs.push([...argv])
         if (w.failures.has(name)) throw new Error(`${name} unavailable`)
+        if (name === 'wslpath' && w.exits.wslpath === undefined) {
+          // wslpath -w <linux path> prints the Windows form of it.
+          return { exitCode: 0, stdout: `\\\\wsl.localhost\\Ubuntu${(argv[2] ?? '').replace(/\//g, '\\')}\n`, stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
+        }
         if (name === 'uname') {
           return { exitCode: 0, stdout: `${w.env.UNAME ?? 'Linux'}\n`, stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
         }
@@ -134,12 +141,13 @@ async function notification(w: World, message: string, notificationType = 'permi
 }
 
 // The body travels as base64 so no character of it is ever PowerShell source.
-function psBody(script: string | undefined): string {
-  const match = /FromBase64String\('([A-Za-z0-9+/=]*)'\)/.exec(script ?? '')
-  return new TextDecoder().decode(Uint8Array.from(atob(match?.[1] ?? ''), ch => ch.charCodeAt(0)))
+function psBody(argv: string[] | undefined): string {
+  const encoded = argv?.[argv.indexOf('-BodyBase64') + 1] ?? ''
+  return new TextDecoder().decode(Uint8Array.from(atob(encoded), ch => ch.charCodeAt(0)))
 }
 
 const NOTIFIERS = ['notify-send', 'osascript', 'powershell.exe']
+const INLINE_FLAGS = ['-e', '-c', '-Command', '-EncodedCommand']
 const notifierArgv = (w: World) => w.argvs.filter(argv => NOTIFIERS.includes(argv[0] ?? ''))
 
 describe('notify sends platform notifications with exact argv', () => {
@@ -149,31 +157,42 @@ describe('notify sends platform notifications with exact argv', () => {
     expect(notifierArgv(w)).toEqual([['notify-send', 'Claude Code', 'project finished in 2m14s']])
   })
 
-  test('macos uses osascript with escaped quotes', async () => {
+  test('macos runs the shipped script with title and body as argv', async () => {
     const w = world({ env: { OS: 'Linux', UNAME: 'Darwin' } })
     ;(w.$ as unknown as { session: { root: () => Promise<string> } }).session.root = async () => '/work/my "proj"'
     await completeTurn(w, 65_000)
-    expect(notifierArgv(w)).toEqual([['osascript', '-e', 'display notification "my \\"proj\\" finished in 1m05s" with title "Claude Code"']])
+    // Argv carries the body as data, so quotes need no escaping.
+    expect(notifierArgv(w)).toEqual([['osascript', '/plugins/ultramod/scripts/notify.applescript', 'Claude Code', 'my "proj" finished in 1m05s']])
   })
 
-  test('windows uses powershell and carries the body as base64 data', async () => {
+  test('windows runs the shipped script with the body as base64 data', async () => {
     const w = world({ env: { OS: 'Windows_NT' } })
+    w.pluginRoot = 'C:\\Users\\me\\.claude\\plugins\\ultramod'
     await completeTurn(w, 134_000)
     const argv = notifierArgv(w)[0] ?? []
-    expect(argv.slice(0, 3)).toEqual(['powershell.exe', '-NoProfile', '-Command'])
-    expect(psBody(argv[3])).toBe('project finished in 2m14s')
-    expect(argv[3]).toContain("$n.ShowBalloonTip(5000, 'Claude Code', $body, 'Info')")
+    expect(argv.slice(0, 6)).toEqual(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'C:\\Users\\me\\.claude\\plugins\\ultramod\\scripts\\notify.ps1'])
+    expect(argv[6]).toBe('-BodyBase64')
+    expect(psBody(argv)).toBe('project finished in 2m14s')
+    expect(argv).toHaveLength(8)
   })
 
-  test('a folder name with curly quotes cannot break out of the powershell script', async () => {
+  test('a folder name with curly quotes stays data for the powershell script', async () => {
     const w = world({ env: { OS: 'Windows_NT' } })
     const folder = 'x\u2019); Start-Process calc; #'
     ;(w.$ as unknown as { session: { root: () => Promise<string> } }).session.root = async () => `/work/${folder}`
     await completeTurn(w, 134_000)
-    const script = notifierArgv(w)[0]?.[3] ?? ''
-    expect(script).not.toContain('Start-Process')
-    expect(script).not.toContain('\u2019')
-    expect(psBody(script)).toBe(`${folder} finished in 2m14s`)
+    const argv = notifierArgv(w)[0] ?? []
+    expect(argv.join(' ')).not.toContain('Start-Process')
+    expect(argv.join(' ')).not.toContain('\u2019')
+    expect(psBody(argv)).toBe(`${folder} finished in 2m14s`)
+  })
+
+  test('no notifier gets an inline program', async () => {
+    for (const env of [{ OS: 'Linux', UNAME: 'Darwin' }, { OS: 'Windows_NT' }, { OS: 'Linux', WSL_DISTRO_NAME: 'Ubuntu' }]) {
+      const w = world({ env })
+      await completeTurn(w, 134_000)
+      for (const argv of notifierArgv(w)) expect(argv.filter(arg => INLINE_FLAGS.includes(arg))).toEqual([])
+    }
   })
 
   test('the platform comes from uname, not from the OS variable', async () => {
@@ -182,17 +201,35 @@ describe('notify sends platform notifications with exact argv', () => {
     expect(notifierArgv(w)[0]?.[0]).toBe('osascript')
   })
 
-  test('wsl uses powershell even on a linux os string', async () => {
+  test('wsl converts the script path with wslpath before powershell reads it', async () => {
     const w = world({ env: { OS: 'Linux', WSL_DISTRO_NAME: 'Ubuntu' } })
     await completeTurn(w, 134_000)
-    expect(notifierArgv(w)[0]?.slice(0, 2)).toEqual(['powershell.exe', '-NoProfile'])
+    expect(w.argvs.filter(argv => argv[0] === 'wslpath')).toEqual([['wslpath', '-w', '/plugins/ultramod/scripts/notify.ps1']])
+    const argv = notifierArgv(w)[0] ?? []
+    expect(argv.slice(0, 5)).toEqual(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File'])
+    expect(argv[5]).toBe('\\\\wsl.localhost\\Ubuntu\\plugins\\ultramod\\scripts\\notify.ps1')
+    expect(psBody(argv)).toBe('project finished in 2m14s')
+  })
+
+  test('wsl falls back to a toast when the path cannot be converted', async () => {
+    const w = world({ env: { OS: 'Linux', WSL_DISTRO_NAME: 'Ubuntu' } })
+    w.exits.wslpath = 1
+    await completeTurn(w, 134_000)
+    expect(notifierArgv(w)).toEqual([])
+    expect(w.toasts).toEqual(['project finished in 2m14s'])
+  })
+
+  test('native windows does not call wslpath', async () => {
+    const w = world({ env: { OS: 'Windows_NT' } })
+    await completeTurn(w, 134_000)
+    expect(w.argvs.filter(argv => argv[0] === 'wslpath')).toEqual([])
   })
 
   test('a windows root still names the folder', async () => {
     const w = world({ env: { OS: 'Windows_NT' } })
     ;(w.$ as unknown as { session: { root: () => Promise<string> } }).session.root = async () => 'C:\\work\\project'
     await completeTurn(w, 134_000)
-    expect(psBody(notifierArgv(w)[0]?.[3])).toBe('project finished in 2m14s')
+    expect(psBody(notifierArgv(w)[0])).toBe('project finished in 2m14s')
   })
 
   test('classic.Notification says the project needs you', async () => {
@@ -368,12 +405,13 @@ describe('notifier delivery details', () => {
     expect(w.toasts).toEqual(['project finished in 2m14s'])
   })
 
-  test('a newline in the body cannot break the osascript string', async () => {
+  test('a newline in the body stays inside one osascript argument', async () => {
     const w = world({ env: { OS: 'Linux', UNAME: 'Darwin' } })
     await notification(w, 'line one\nline two\r\nline three')
-    const script = notifierArgv(w)[0]?.[2] ?? ''
-    expect(script).not.toMatch(/[\r\n]/)
-    expect(script).toContain('line one line two line three')
+    const argv = notifierArgv(w)[0] ?? []
+    // No script text is built from the body, so a newline cannot end a string.
+    expect(argv).toHaveLength(4)
+    expect(argv[3]).toBe('project needs you: line one\nline two\r\nline three')
   })
 })
 

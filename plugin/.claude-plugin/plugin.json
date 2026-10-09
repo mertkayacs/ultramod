@@ -10,7 +10,6 @@
   "repository": "https://github.com/mertkayacs/ultramod",
   "license": "MIT",
   "keywords": ["claude-code", "mods", "hooks", "context", "safety"],
-  "types": "./types/index.d.ts",
   "userConfig": {
     "set": {
       "type": "string",

@@ -12,3 +12,9 @@ test('userConfig entries use only keys that every supported Claude Code accepts'
     for (const key of Object.keys(entry)) assert.ok(KNOWN.has(key), `userConfig.${name}: unsupported key "${key}"`);
   }
 });
+
+// The directory validator reports "types" as an unknown field. The contract
+// lives in plugin/types and is reached through tsconfig.json instead.
+test('the manifest has no "types" field', () => {
+  assert.equal('types' in manifest, false);
+});

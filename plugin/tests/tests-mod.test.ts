@@ -384,7 +384,10 @@ describe('tests deny mode notifies an away user (C34)', () => {
   })
 })
 
-describe('tests remembers an approved call (C35)', () => {
+// Directory rule: a permission hook passes the check on or answers a fixed
+// deny or ask. The C35 tests asserted an allow answer for a call approved in
+// this mod's dialog; that answer is gone, so the engine's own verdict stands.
+describe('tests never answers a permission check with allow', () => {
   const approve = (w: World, id: string) => {
     w.files.set('src/app.test.ts', 'test("a", () => { expect(1).toBe(1) })')
     return call(w, { ...editTest('test("a"', 'test.skip("a"'), tool_use_id: id } as unknown as Args<'tool.call'>)
@@ -397,31 +400,16 @@ describe('tests remembers an approved call (C35)', () => {
     return dispatcher.dispatch(w.$, 'tool.check', e, bottom('tool.check', { decision: verdict } as EventResult<'tool.check'>, calls))
   }
 
-  test('the engine ask for an approved call is answered with allow', async () => {
+  test('the engine ask after an approved dialog stays an ask', async () => {
     const w = world()
-    await approve(w, 'toolu_1')
-    expect(await check(w, 'toolu_1')).toEqual({ decision: 'allow' })
-  })
-
-  test('another call and a deny verdict are untouched', async () => {
-    const w = world()
-    await approve(w, 'toolu_1')
-    expect(await check(w, 'toolu_2')).toEqual({ decision: 'ask' })
-    expect(await check(w, 'toolu_1', 'deny')).toEqual({ decision: 'deny' })
-    expect(await check(w, undefined)).toEqual({ decision: 'ask' })
-  })
-
-  test('a refused call is not remembered', async () => {
-    const w = world()
-    w.askAnswer = () => 'Refuse'
     await approve(w, 'toolu_1')
     expect(await check(w, 'toolu_1')).toEqual({ decision: 'ask' })
   })
 
-  test('nothing is remembered when no dialog ran', async () => {
+  test('deny and allow verdicts from below pass through unchanged', async () => {
     const w = world()
-    w.files.set('src/app.test.ts', 'const a = 1')
-    await call(w, { ...editTest('1', '2'), tool_use_id: 'toolu_9' } as unknown as Args<'tool.call'>)
-    expect(await check(w, 'toolu_9')).toEqual({ decision: 'ask' })
+    await approve(w, 'toolu_1')
+    expect(await check(w, 'toolu_1', 'deny')).toEqual({ decision: 'deny' })
+    expect(await check(w, 'toolu_1', 'allow')).toEqual({ decision: 'allow' })
   })
 })
