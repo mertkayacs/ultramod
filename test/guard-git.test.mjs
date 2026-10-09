@@ -18,10 +18,11 @@ function git(dir, ...argv) {
   return r.stdout.trim();
 }
 
-// The same contract as the mod's runner: trimmed stdout, never throws.
+// The same contract as the mod's runner: trimmed stdout (a -z list raw), never throws.
 const run = async (argv, cwd, env) => {
   const r = spawnSync(argv[0], argv.slice(1), { cwd, env: { ...process.env, ...env }, encoding: 'utf8' });
-  return { ok: r.status === 0, out: (r.stdout ?? '').trim() };
+  const out = r.stdout ?? '';
+  return { ok: r.status === 0, out: argv.includes('-z') ? out : out.trim() };
 };
 const drop = async (cwd, path) => {
   await run(['rm', '-f', path], cwd);
@@ -188,6 +189,22 @@ test('a directory that became a file aborts the restore and names the file', asy
   assert.equal(await restoreSnapshot(run, drop, dir, sha, (paths) => found.push(...paths)), false);
   assert.deepEqual(found, ['cfg']);
   assert.equal(readFileSync(join(dir, 'cfg'), 'utf8'), 'a newer file\n');
+  assert.deepEqual(stray(dir), []);
+});
+
+// aitmpl review: a path starting with a space sorts first in a -z list.
+test('a path that starts with a space is checked for conflicts too', async () => {
+  const dir = repo();
+  mkdirSync(join(dir, ' cfg'));
+  writeFileSync(join(dir, ' cfg', 'app.txt'), 'cfg v1\n');
+  await saveSnapshot(run, drop, dir, 'ultramod snapshot: rm -rf " cfg"', 9_200_000, fail);
+  const sha = git(dir, 'for-each-ref', '--format=%(objectname)', SNAPSHOT_REF);
+  rmSync(join(dir, ' cfg'), { recursive: true });
+  writeFileSync(join(dir, ' cfg'), 'a newer file\n');
+  const found = [];
+  assert.equal(await restoreSnapshot(run, drop, dir, sha, (paths) => found.push(...paths)), false);
+  assert.deepEqual(found, [' cfg']);
+  assert.equal(readFileSync(join(dir, ' cfg'), 'utf8'), 'a newer file\n');
   assert.deepEqual(stray(dir), []);
 });
 

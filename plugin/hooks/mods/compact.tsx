@@ -49,7 +49,12 @@ let autoHeld = false
 // True once the compaction went through; the warning flags then start over.
 async function compactNow(api: UltraApi): Promise<boolean> {
   try {
-    await api.session.compact({ instructions: compactInstructions(await read(api, receiptHistory)) })
+    const result = await api.session.compact({ instructions: compactInstructions(await read(api, receiptHistory)) })
+    // A hook that vetoes the compaction answers { skip } instead of throwing.
+    if ('skip' in result) {
+      api.ui.log(`Ultra Mod could not compact: ${result.skip}`)
+      return false
+    }
   } catch (error) {
     // Compaction is best effort: a failure leaves the turn untouched and the next one can try again.
     api.ui.log(`Ultra Mod could not compact: ${error instanceof Error ? error.message : String(error)}`)

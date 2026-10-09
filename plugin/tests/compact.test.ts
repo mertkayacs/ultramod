@@ -15,7 +15,9 @@ function world(on: On, percent = 50) {
   const toasts: string[] = []
   const instructions: (string | undefined)[] = []
   const flags: (UltraCompact | undefined)[] = []
-  const failures = { compact: false }
+  const failures = { compact: false, veto: false }
+  const logs: string[] = []
+  on('ui.log', ($, e) => { logs.push(e.text); return { value: undefined } })
   on('session.root', () => ({ value: '/work' }))
   on('session.usage', () => ({ value: usage }))
   on('session.model', () => ({ value: 'claude-sonnet-4-6' }))
@@ -29,10 +31,11 @@ function world(on: On, percent = 50) {
   on('ui.toast', ($, e) => { toasts.push(e.text); return { value: undefined } })
   on('session.compact', ($, e) => {
     if (failures.compact) throw new Error('compaction refused')
+    if (failures.veto) return { skip: 'another plugin vetoed it' }
     instructions.push(e.instructions)
     return { messages: [{ role: 'assistant', text: 'compacted', toolUses: [] }] }
   })
-  return { clock, usage, toasts, instructions, flags, failures }
+  return { clock, usage, toasts, instructions, flags, failures, logs }
 }
 
 async function turn($: Engine, id: string, usage: SessionUsage, percent: number) {
@@ -231,4 +234,19 @@ test('a successful compaction starts the warning cycle over', async ($, on) => {
   await ui.unmount()
   await turn($, 't2', usage, 86)
   expect(toasts).toHaveLength(2)
+})
+
+// aitmpl review round (1.0.6)
+test('a vetoed auto compaction counts as failed and is tried again on the next turn', { options: { set: 'marathon' } }, async ($, on) => {
+  const { clock, usage, instructions, failures, logs, flags } = world(on, 90)
+  failures.veto = true
+  await turn($, 't1', usage, 90)
+  await clock.settle()
+  expect(instructions).toEqual([])
+  expect(logs).toContain('Ultra Mod could not compact: another plugin vetoed it')
+  expect(flags.at(-1)).toEqual({ warned: true, offered: true })
+  failures.veto = false
+  await turn($, 't2', usage, 90)
+  await clock.settle()
+  expect(instructions).toHaveLength(1)
 })

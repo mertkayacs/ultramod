@@ -84,7 +84,7 @@ const CASES: Case[] = [
   { cmd: 'git reset --hard HEAD~1', want: 'git-reset-hard', snapshot: true },
   { cmd: 'git reset --hard', want: 'git-reset-hard', snapshot: true },
   { cmd: 'git clean -fd', want: 'git-clean', snapshot: true },
-  { cmd: 'git clean -xfd', want: 'git-clean', snapshot: true },
+  { cmd: 'git clean -xfd', want: 'git-clean', snapshot: false },
   { cmd: 'git checkout -- .', want: 'git-checkout-discard', snapshot: true },
   { cmd: 'git checkout .', want: 'git-checkout-discard', snapshot: true },
   { cmd: 'git checkout HEAD -- .', want: 'git-checkout-discard', snapshot: true },
@@ -712,5 +712,92 @@ describe('round 2 linear time', () => {
     expect(classifyCommand('x(){ x|x& };x')?.id).toBe('fork-bomb')
     expect(classifyCommand('echo a:(){ :|:& };:')?.id).toBe('fork-bomb')
     expect(classifyCommand('ab(){ b|b& };b')).toBeNull()
+  })
+})
+
+describe('aitmpl review round (1.0.6)', () => {
+  test('env options never hide the command after them', () => {
+    for (const cmd of ['env -0 rm -rf /', 'env -v rm -rf /', 'env --debug rm -rf /', 'env -i -0 rm -rf /', "env -S 'rm -rf /'", "env -S'rm -rf /'", "env --split-string='rm -rf /'", 'env -u HOME -C /tmp rm -rf /']) {
+      expect(classifyCommand(cmd)?.id).toBe('rm-recursive')
+    }
+  })
+
+  test('a script read from standard input is checked like bash -s', () => {
+    for (const shell of ['bash /dev/stdin', 'sh /dev/fd/0', 'bash -- /dev/stdin', 'source /dev/stdin', 'bash /proc/self/fd/0']) {
+      expect(classifyCommand(`${shell} <<'EOF'\nrm -rf /\nEOF`)?.id).toBe('rm-recursive')
+    }
+    expect(classifyCommand("bash /dev/stdin <<'EOF'\nls -la\nEOF")).toBeNull()
+  })
+
+  test('SQL words are read decoded and with PostgreSQL comment rules', () => {
+    expect(classifyCommand("psql -c $'DROP--x\\nTABLE users'")?.id).toBe('sql-drop')
+    expect(classifyCommand("psql -c 'DROP--x\nTABLE users'")?.id).toBe('sql-drop')
+    expect(classifyCommand("psql -c $'DROP\\tTABLE users'")?.id).toBe('sql-drop')
+    expect(classifyCommand("psql --set=ON_ERROR_STOP=1 -c 'DROP/**/TABLE users'")?.id).toBe('sql-drop')
+    expect(classifyCommand("psql -c 'SELECT 1 -- DROP TABLE users'")?.id).toBe('sql-drop')
+    expect(classifyCommand('psql --set=ON_ERROR_STOP=1 -c "SELECT count(*) FROM users"')).toBeNull()
+  })
+
+  test('SQL piped into a carrier behind a remote runner is checked', () => {
+    expect(classifyCommand("echo 'DROP TABLE users' | docker exec -i db psql")?.id).toBe('sql-drop')
+    expect(classifyCommand("echo 'DROP TABLE users' | kubectl exec -i db -- psql")?.id).toBe('sql-drop')
+    expect(classifyCommand("printf 'DELETE FROM users;' | ssh db psql")?.id).toBe('sql-delete-all')
+    expect(classifyCommand("echo 'SELECT 1' | docker exec -i db psql")).toBeNull()
+    expect(classifyCommand("echo 'DROP TABLE users' | docker exec -i web cat")).toBeNull()
+  })
+
+  test('git clean that deletes ignored files is not promised a snapshot', () => {
+    for (const cmd of ['git clean -fdx', 'git clean -fX', 'git clean -f -x', 'git clean -xdf']) {
+      expect(classifyCommand(cmd)).toMatchObject({ id: 'git-clean', snapshot: false })
+    }
+    expect(classifyCommand('git clean -fd')).toMatchObject({ id: 'git-clean', snapshot: true })
+    expect(classifyCommand('git clean -fd -e .xyz')).toMatchObject({ id: 'git-clean', snapshot: true })
+  })
+
+  test('runsElsewhere reads env and sudo options before the assignments', () => {
+    expect(runsElsewhere('env -u X GIT_DIR=/tmp/other/.git GIT_WORK_TREE=/tmp/other git reset --hard')).toBe(true)
+    expect(runsElsewhere('sudo -u root GIT_WORK_TREE=/tmp/other git reset --hard')).toBe(true)
+    expect(runsElsewhere('env -C /tmp/other git reset --hard')).toBe(true)
+    expect(runsElsewhere('env --chdir=/tmp/other git reset --hard')).toBe(true)
+    expect(runsElsewhere('sudo -D /tmp/other git reset --hard')).toBe(true)
+    expect(runsElsewhere("env -S 'GIT_DIR=/tmp/other/.git git reset --hard'")).toBe(true)
+    expect(runsElsewhere('export GIT_DIR=/tmp/other/.git; git reset --hard')).toBe(true)
+    expect(runsElsewhere('GIT_DIR=/tmp/other/.git; git reset --hard')).toBe(true)
+    expect(runsElsewhere('env -u X git reset --hard')).toBe(false)
+    expect(runsElsewhere('env -C sub git reset --hard')).toBe(false)
+    expect(runsElsewhere('env -C sub rm -rf ../build-cache')).toBe(false)
+  })
+
+  test('runsElsewhere measures .. from the session directory inside the work tree', () => {
+    expect(runsElsewhere('git -C .. reset --hard')).toBe(true)
+    expect(runsElsewhere('git -C .. reset --hard', ['pkg'])).toBe(false)
+    expect(runsElsewhere('cd .. && git reset --hard', ['pkg', 'web'])).toBe(false)
+    expect(runsElsewhere('git -C ../.. reset --hard', ['pkg'])).toBe(true)
+    expect(runsElsewhere('rm -rf ../../precious', ['pkg'])).toBe(true)
+  })
+})
+
+describe('aitmpl review round (1.0.6), second pass', () => {
+  test('env -S splits its value into more env arguments', () => {
+    expect(classifyCommand("env -S '-i' rm -rf src")?.id).toBe('rm-recursive')
+    expect(classifyCommand("env -S '-u HOME' rm -rf src")?.id).toBe('rm-recursive')
+    expect(classifyCommand("env -S '-i' git reset --hard")?.id).toBe('git-reset-hard')
+    expect(classifyCommand("env -S '-i' bash -c 'rm -rf src'")?.id).toBe('rm-recursive')
+    expect(runsElsewhere("env -S '-C /tmp' git clean -fd")).toBe(true)
+    expect(classifyCommand("env -S '-i' ls")).toBeNull()
+  })
+
+  test('chained env -S stays linear and is asked about past the depth it follows', () => {
+    const start = Date.now()
+    expect(classifyCommand('env -S env '.repeat(20000) + 'rm -rf src')?.id).toBe('unchecked')
+    expect(Date.now() - start).toBeLessThan(1500)
+    expect(classifyCommand('env -S env '.repeat(3) + 'rm -rf src')?.id).toBe('rm-recursive')
+    expect(classifyCommand('env -uSOMEVAR')).toBeNull()
+  })
+
+  test('sudo -D with its directory attached is a start directory', () => {
+    expect(runsElsewhere('sudo -D/tmp rm -rf src')).toBe(true)
+    expect(runsElsewhere('sudo -D/tmp git clean -fd')).toBe(true)
+    expect(runsElsewhere('sudo -Dsub git clean -fd')).toBe(false)
   })
 })
