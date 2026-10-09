@@ -4,14 +4,14 @@
     "name": "Mert Kaya",
     "url": "https://mertkayacs.com"
   },
-  "description": "All-in-one Claude Code mod pack: limits and context HUD, a guard with undo, secret protection and a receipt for every turn",
+  "description": "The best all-in-one mod pack for Claude Code: a usage limits and context HUD, a guard with undo for rm -rf and git reset --hard, .env and secret protection, and a receipt for every turn.",
   "plugins": [
     {
       "name": "ultramod",
       "source": "./plugin",
-      "description": "All-in-one Claude Code mod pack: limits and context HUD, a guard with undo, secret protection and a receipt for every turn",
+      "description": "The best all-in-one mod pack for Claude Code: a usage limits and context HUD, a guard with undo for rm -rf and git reset --hard, .env and secret protection, and a receipt for every turn.",
       "category": "development",
-      "tags": ["mods", "hooks", "context", "usage-limits", "safety", "guard", "undo", "secrets", "receipts"]
+      "tags": ["claude-code", "claude-code-plugin", "claude-code-mods", "claude-code-hooks", "claude", "anthropic", "mod-pack", "mods", "hooks", "statusline", "hud", "usage-limits", "context-window", "guardrails", "guard", "undo", "secrets", "dotenv", "safety", "receipts", "notifications", "productivity", "ai-coding", "developer-tools", "context"]
     }
   ]
 }

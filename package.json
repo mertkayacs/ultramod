@@ -1,7 +1,7 @@
 {
   "name": "ultramod",
-  "version": "1.0.4",
-  "description": "All-in-one mod pack for Claude Code: usage limits and context HUD, a guard with undo for risky commands, .env and secret protection, and a receipt for every turn",
+  "version": "1.0.5",
+  "description": "The best all-in-one mod pack for Claude Code: a usage limits and context HUD, a guard with undo for rm -rf and git reset --hard, .env and secret protection, and a receipt for every turn.",
   "type": "module",
   "files": [
     "plugin/",
@@ -36,18 +36,26 @@
     "claude-code-hooks",
     "claude",
     "anthropic",
+    "mod-pack",
     "mods",
     "hooks",
     "statusline",
+    "hud",
     "usage-limits",
     "context-window",
+    "guardrails",
     "guard",
     "undo",
     "secrets",
-    "redaction",
-    "ai-agents",
+    "dotenv",
+    "safety",
+    "receipts",
+    "notifications",
+    "productivity",
     "ai-coding",
-    "developer-tools"
+    "developer-tools",
+    "redaction",
+    "ai-agents"
   ],
   "publishConfig": {
     "access": "public",
@@ -57,7 +65,7 @@
     "validate": "claude plugin validate ./ --strict && claude plugin validate ./plugin --strict",
     "test": "claude plugin test ./plugin",
     "typecheck": "node scripts/engine-types.mjs && tsc --noEmit",
-    "installer:test": "node --experimental-strip-types --test test/manifest.test.mjs test/scripts.test.mjs test/installer.test.mjs test/guard-git.test.mjs",
+    "installer:test": "node --experimental-strip-types --test test/manifest.test.mjs test/scripts.test.mjs test/directory.test.mjs test/installer.test.mjs test/guard-git.test.mjs",
     "check": "npm run validate && npm test && npm run typecheck"
   },
   "devDependencies": {
