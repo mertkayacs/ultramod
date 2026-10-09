@@ -1,6 +1,6 @@
 {
   "name": "ultramod",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "All-in-one mod pack for Claude Code: usage limits and context HUD, a guard with undo for risky commands, .env and secret protection, and a receipt for every turn",
   "type": "module",
   "files": [

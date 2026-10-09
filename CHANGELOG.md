@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2 (2026-10-09)
+
+### Fixes
+- undo: the snapshot commit carries its own author, so snapshots work on a machine with no git `user.name` or `user.email` (a fresh CI image or laptop); before, the guard logged "git commit-tree failed" and `/ultra undo` had nothing to restore
+- tests: fake keys in the redaction tests are split into string parts, so plugin registries and secret scanners no longer read them as leaked secrets
+
 ## 1.0.1 (2026-10-09)
 
 Hardening release. Reviewers on two listing PRs filed 74 findings against 1.0.0; each one is fixed with a test or answered with evidence.
