@@ -100,6 +100,7 @@ Options: `Run it` / `Allow for session` / `Refuse`. In `claude -p`, on dismiss, 
 | device-redirect | `>` / `>>` onto `/dev/sd*`, `/dev/nvme*` | writes to a disk device | no |
 | pipe-to-shell | `curl\|wget ... \| sh\|bash` | pipes a download into a shell | no |
 | fork-bomb | `:(){ :|:& };:` pattern | exponential process bomb | no |
+| unchecked | commands nested deeper than the guard reads (substitutions or `sh -c` inside each other) | nests commands deeper than the guard can read | no |
 
 **Strict adds:**
 
