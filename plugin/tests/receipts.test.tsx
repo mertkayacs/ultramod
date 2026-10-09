@@ -80,6 +80,21 @@ test('subagent turns and subagent tool calls stay out of the receipt', async ($,
   expect(stored[0]?.[0]?.commands).toHaveLength(1)
 })
 
+// A subagent raises no turn.start (the engine declarations say so), so only its
+// turn.complete can reach this mod. Even one that carries the parent's own turn
+// id must leave the parent's collection in place.
+test('a subagent turn.complete never takes the parent receipt', async ($, on) => {
+  const { stored } = world(on)
+  await start($, 't1')
+  await $.tool.call(edit('/work/a.ts'))
+  await finish($, 't1', 'sub done', { agentId: 'child' })
+  await finish($, 'other', 'sub done', { agentId: 'child' })
+  await $.tool.call(bash('npm test'))
+  const result = await finish($, 't1', 'All tests pass.')
+  expect(result.text).toBe('receipt · 1 file · 1 cmd · tests passed · 1s')
+  expect(stored).toHaveLength(1)
+})
+
 test('an aborted turn keeps no receipt', async ($, on) => {
   const { stored } = world(on)
   await start($, 't1')
@@ -173,6 +188,40 @@ test('a failed run of the claimed kind is still a run, but never passes', async 
   await $.tool.call(edit('/work/a.ts'))
   results.push({ isError: true, text: 'boom' })
   await $.tool.call(bash('npm test'))
+  expect((await finish($, 't1', 'All tests pass.')).text)
+    .toBe('receipt · 1 file · 1 cmd (1 failed) · tests failed · 1s · unverified: says tests pass, no passing test run after the last edit')
+})
+
+// The exit code of `npm test || true`, `npm test; echo done` and `npm test | tail`
+// is the last command's, so a zero exit after them says nothing about the tests.
+test('a call whose exit can hide a failed test is no passing evidence', async ($, on) => {
+  const { stored } = world(on)
+  for (const command of ['npm test || true', 'npm test; echo done', 'npm test 2>&1 | tail -20', 'npm test && echo ok || echo bad', 'npm test & wait']) {
+    await start($, 'g11')
+    await $.tool.call(edit('/work/a.ts'))
+    await $.tool.call(bash(command))
+    expect((await finish($, 'g11', 'All tests pass.')).text, command)
+      .toBe('receipt · 1 file · 1 cmd · 1s · unverified: says tests pass, no passing test run after the last edit')
+    expect(stored.at(-1)?.at(-1)?.commands.map(run => [run.command, run.kind, run.passed]), command).toEqual([[command, null, true]])
+  }
+})
+
+test('a plain && chain still vouches for its tests', async ($, on) => {
+  world(on)
+  for (const command of ['cd app && npm test', 'npm run build && npm test 2>&1', 'npm test']) {
+    await start($, 'chain')
+    await $.tool.call(edit('/work/a.ts'))
+    await $.tool.call(bash(command))
+    expect((await finish($, 'chain', 'All tests pass.')).text, command).toBe('receipt · 1 file · 1 cmd · tests passed · 1s')
+  }
+})
+
+test('a failed call keeps its kind however it is joined', async ($, on) => {
+  const { results } = world(on)
+  await start($, 't1')
+  await $.tool.call(edit('/work/a.ts'))
+  results.push({ isError: true, text: 'FAIL src/a.test.ts' })
+  await $.tool.call(bash('npm test 2>&1 | tail -20'))
   expect((await finish($, 't1', 'All tests pass.')).text)
     .toBe('receipt · 1 file · 1 cmd (1 failed) · tests failed · 1s · unverified: says tests pass, no passing test run after the last edit')
 })

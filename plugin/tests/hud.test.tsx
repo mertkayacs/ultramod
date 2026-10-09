@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import type { EngineInterface, On, RenderElement, RenderInput, RenderPropsOf, SessionUsage, ToolCallArgs } from 'claude-code'
+import type { EngineInterface, On, RenderElement, RenderInput, RenderNode, RenderPropsOf, SessionUsage, ToolCallArgs } from 'claude-code'
 import { createHud } from '../hooks/mods/hud'
 import type { ModNext, UltraMod } from '../hooks/core/mod'
 import { createSets, resolveSet } from '../hooks/core/sets'
@@ -39,6 +39,8 @@ function world(on: On, readings = usage(), downstream = true) {
   })
   return { clock, readings, turns }
 }
+
+const PANE: RenderPropsOf['Pane'] = { title: 'Ultra Mod', isFocused: true, bodyColumns: 100, placement: 'inline', scroll: { offset: 0, bodyRows: 20 }, view: {} }
 
 const command = (args: string) => ({ command: 'ultra', args, origin: { kind: 'composer' } as const, presentation: { isFullscreen: false, columns: 160 } })
 
@@ -100,6 +102,33 @@ test('HUD yields to surveys and unsupported surfaces', async ($, on) => {
     expect(await ui.drawn()).toEqual({ type: 'Text', props: {}, children: ['external band'] })
     await ui.unmount()
   }
+})
+
+// The dispatcher skips a disabled mod's handler, so a HUD that is off leaves
+// the band to the other plugins, however it was switched off.
+test('a disabled HUD draws no row, whether the set or the person turned it off', async ($, on) => {
+  world(on)
+  await $.turn.start({ turnId: 'main', text: '' })
+  const downstreamOnly = { type: 'Text', props: {}, children: ['external band'] }
+  await $.command.run(command('set quiet'))
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'ultramod', surface, component: 'AbovePrompt', props: BAND })
+    expect(await ui.drawn()).toEqual(downstreamOnly)
+    expect(await ui.find({ type: 'Text', text: /ctx |5h|7d|Sonnet|ultra:/ })).toBeUndefined()
+    await ui.unmount()
+  }
+  await $.command.run(command('set essentials'))
+  const pane = await $.ui.mount({ plugin: 'ultramod', surface: 'terminal', component: 'Pane', requestId: 'ultramod', props: PANE })
+  expect(await pane.find({ type: 'Text', text: /^ctx / })).toBeDefined()
+  await pane.press({ key: 'toggle-hud' })
+  expect(await pane.find({ type: 'Text', text: /^ctx / })).toBeUndefined()
+  await pane.unmount()
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'ultramod', surface, component: 'AbovePrompt', props: BAND })
+    expect(await ui.drawn()).toEqual(downstreamOnly)
+    await ui.unmount()
+  }
+  await $.turn.complete({ turnId: 'main', answer: '', durationMs: 0, isAborted: false, reason: 'answer' })
 })
 
 test('flow draws only context and limits', { options: { set: 'flow' } }, async ($, on) => {
@@ -339,6 +368,63 @@ test('HUD fits whole segments into bodyColumns at every width', async ($, on) =>
       await ui.unmount()
     }
   }
+  await $.turn.complete({ turnId: 'main', answer: '', durationMs: 0, isAborted: false, reason: 'answer' })
+})
+
+// Compact now asks for 15 cells (`[ Compact now ]`). The readouts fill their
+// row greedily, so at narrow widths nothing was left for it: it now takes a row
+// of its own under the readouts rather than vanishing after the toast promised it.
+test('Compact now stays on screen at every width the button itself fits', async ($, on) => {
+  const { readings } = world(on)
+  readings.context.percent = 90
+  readings.cost = { usd: 12.34 }
+  await $.turn.start({ turnId: 'main', text: '' })
+  type BoxElement = Extract<RenderElement, { type: 'Box' }>
+  const isBox = (node: RenderNode): node is BoxElement => typeof node !== 'string' && node.type === 'Box'
+  const rowCells = (row: BoxElement): number => (row.children ?? []).reduce((used: number, child) => {
+    if (typeof child === 'string') throw new Error('rows hold elements, not bare text')
+    if (child.type === 'Button') return used + '[ Compact now ]'.length
+    if (child.type === 'Text') return used + String(child.children).length
+    throw new Error(`unexpected row element ${String(child.type)}`)
+  }, 0)
+  let inline = 0
+  let ownRow = 0
+  for (const surface of ['terminal', 'desktop'] as const) {
+    for (const bodyColumns of [15, 20, 40, 60, 80, 100, 120, 160]) {
+      const ui = await $.ui.mount({ plugin: 'ultramod', surface, component: 'AbovePrompt', viewport: { columns: 240, rows: 30 }, props: { ...BAND, bodyColumns, isWorking: true } })
+      const where = `${surface} at ${bodyColumns} columns`
+      expect(await ui.find({ type: 'Button', text: 'Compact now' }), where).toBeDefined()
+      const tree = await ui.drawn()
+      if (tree.type !== 'Box') throw new Error('HUD must preserve the downstream tree in a column Box')
+      const rows = (tree.children ?? []).filter(isBox)
+      expect(rows.length, where).toBeGreaterThan(0)
+      for (const row of rows) {
+        expect(rowCells(row), where).toBeLessThanOrEqual(bodyColumns)
+        expect(row.props).toMatchObject({ width: bodyColumns, flexDirection: 'row' })
+      }
+      // The readouts keep their row. The button joins it while 3 + 15 cells are
+      // left, and otherwise has the next row alone.
+      const holder = rows.find(row => (row.children ?? []).some(child => typeof child !== 'string' && child.type === 'Button'))
+      expect(holder, where).toBeDefined()
+      const first = rows[0]
+      if (!first) throw new Error('the readouts must draw their row first')
+      if (holder === first) {
+        inline += 1
+      } else {
+        ownRow += 1
+        expect(bodyColumns - rowCells(first), where).toBeLessThan(3 + '[ Compact now ]'.length)
+        expect(holder?.children, where).toHaveLength(1)
+      }
+      await ui.unmount()
+    }
+  }
+  expect(inline).toBeGreaterThan(0)
+  expect(ownRow).toBeGreaterThan(0)
+  // Too narrow for the button anywhere: dropped, and the readouts still draw.
+  const narrow = await $.ui.mount({ plugin: 'ultramod', surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, bodyColumns: 14 } })
+  expect(await narrow.find({ type: 'Button', text: 'Compact now' })).toBeUndefined()
+  expect(await narrow.find({ type: 'Text', text: /external band/ })).toBeDefined()
+  await narrow.unmount()
   await $.turn.complete({ turnId: 'main', answer: '', durationMs: 0, isAborted: false, reason: 'answer' })
 })
 

@@ -42,7 +42,7 @@ The core outside the mods also calls `$.store.get`/`$.store.set` (the per-projec
 |-----|-------|--------|
 | hud | none (uses `$.state`) | none (uses `$.state`) |
 | receipts | none (uses `$.state`) | none (uses `$.state`) |
-| guard | `.git` (via `git` commands) | `refs/ultramod/snapshots/*` (git refs), temporary git index file under `.git` |
+| guard | `.git` (via `git` commands) | `refs/worktree/ultramod/snapshots/*` (git refs), temporary git index file under `.git` |
 | secrets | none (blocks reads before they happen) | none |
 | tests | test files (via `$.fs.read`) | none |
 | notify | none | none |
@@ -113,3 +113,13 @@ Validating hooks: ./plugin/hooks/hooks.json
 ```
 
 Run `claude plugin validate ./plugin` yourself to see the full list.
+
+## Known limits
+
+The guard reads shell text; it does not run it. These forms still pass without a question in 1.0.1:
+
+- commands run by another program: `xargs rm -rf`, `find . -exec rm -rf {} +`, `ssh host 'rm -rf ..'`, `docker exec c rm -rf ..`, `su -c '..'`
+- wrappers it does not unwrap yet: `stdbuf`, `flock`, `chronic` and similar
+- a command name held in a variable (`$CMD -rf src`)
+
+Secrets does not expand braces (`cat .env{,.bak}`) and does not read the pattern argument of the Grep and Glob tools. Snapshots leave out tracked files that also match `.gitignore`. Treat all three mods as a second pair of eyes; Claude Code's own permission rules still apply.

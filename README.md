@@ -1,6 +1,6 @@
 <h1 align="center">Ultra Mod</h1>
 
-<p align="center">A mod pack for Claude Code. See context, limits and cost at a glance, stop the commands you would regret, keep secrets out of the model, and get a receipt for every turn.</p>
+<p align="center"><b>The all-in-one mod pack for Claude Code.</b> Ten mods in one install: your usage limits and context window above the prompt, a guard with undo for <code>rm -rf</code> and <code>git reset --hard</code>, <code>.env</code> files kept away from the model, and a receipt under every answer that shows what really ran.</p>
 
 <p align="center">
   <a href="https://github.com/mertkayacs/ultramod/actions/workflows/ci.yml"><img src="https://github.com/mertkayacs/ultramod/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
@@ -30,13 +30,17 @@ npx ultramod
 
 Open Claude Code and type `/ultra`. The defaults work as they are; `/plugin configure ultramod@ultramod` changes the default set, the notification delay and the sound.
 
+## Why Ultra Mod
+
+Most Claude Code setups grow the same pile of extras: a status line script for usage limits, a hook or two against `rm -rf`, something to keep `.env` out of reach, and the habit of scrolling back to check whether the tests really ran. Ultra Mod puts all of that in one plugin, built on the mods API that Claude Code shipped in 2.1.287. It never calls a model itself, and you can switch any mod off from the `/ultra` pane.
+
 ## What it does
 
 | Mod | What you get | On by default |
 | --- | --- | --- |
 | **hud** | One line above the prompt: context bar, 5-hour and 7-day limits with reset times, turn timer, cost, model | yes |
-| **receipts** | A line under each answer with what really happened: files changed, commands run, tests passed or failed, time, cost. It flags "tests pass" claims when no passing test ran after the last edit | yes |
-| **guard** | Holds `rm -rf`, `git reset --hard`, force pushes, `DROP TABLE`, `terraform destroy` and similar until you say yes. Before a destructive git or rm command it snapshots your work, so `/ultra undo` can bring it back | yes |
+| **receipts** | A line under each answer with what really happened: files changed, commands run, tests passed or failed, time, cost. It flags "tests pass" claims when no passing test ran after the last edit. A test piped into another command or followed by `;` or `\|\|` does not count, because the exit code can hide a failure | yes |
+| **guard** | Holds `rm -rf`, `git reset --hard`, force pushes, `DROP TABLE`, `terraform destroy` and similar until you say yes. Before a destructive git or rm command in a git work tree it tries to save a snapshot, so `/ultra undo` has something to restore. Snapshots are best effort: a failed one is logged and does not block the command | yes |
 | **secrets** | Refuses reads of `.env`, keys and credential files, and redacts tokens (GitHub, Anthropic, OpenAI, AWS, Stripe and more) from tool output before Claude sees them | yes |
 | **tests** | Asks before Claude skips a test, adds `.only`, deletes a test file or removes assertions | yes |
 | **notify** | A desktop notification when a long turn ends or Claude is waiting for you | yes |
@@ -45,14 +49,14 @@ Open Claude Code and type `/ultra`. The defaults work as they are; `/plugin conf
 | **pins** | Keeps the rules in `.claude/pins.md` in the system prompt, so they survive long sessions and compaction | when the file exists |
 | **tidy** | Asks before Claude writes new summary or notes files you did not ask for | strict set |
 
-Ultra Mod spends no model tokens on its own. `claude plugin details ultramod` reports about 0 always-on tokens. Pins adds your pinned lines to the system prompt, and compaction runs the normal `/compact` when you ask for it.
+Ultra Mod calls no model itself, and `claude plugin details ultramod` reports about 0 always-on tokens. It still adds some text to what Claude reads: the lines of `.claude/pins.md` (at most 30 lines and 3,000 characters) go into the system prompt of every request while the file exists, and a refusal or a loop nudge is a short message in the conversation. Compaction runs the normal `/compact`, from the Compact now button or, in the marathon set, by itself at 88%.
 
 ## See it
 
 <table>
   <tr>
     <td width="50%"><img src="https://raw.githubusercontent.com/mertkayacs/ultramod/media/clips/receipt.gif" alt="The HUD above the prompt and a receipt under the answer: 1 cmd, tests passed, 6s, cost"><br><b>HUD and receipts.</b> Limits with reset times above the prompt, and what really ran under every answer.</td>
-    <td width="50%"><img src="https://raw.githubusercontent.com/mertkayacs/ultramod/media/clips/guard-undo.gif" alt="The guard holds git reset --hard, the user approves, and /ultra undo restores the discarded work"><br><b>Guard and undo.</b> <code>git reset --hard</code> waits for your yes, and <code>/ultra undo</code> brings the work back.</td>
+    <td width="50%"><img src="https://raw.githubusercontent.com/mertkayacs/ultramod/media/clips/guard-undo.gif" alt="The guard holds git reset --hard, the user approves, and /ultra undo restores the discarded work"><br><b>Guard and undo.</b> <code>git reset --hard</code> waits for your yes, and <code>/ultra undo</code> brings the work back from the snapshot taken first.</td>
   </tr>
   <tr>
     <td width="50%"><img src="https://raw.githubusercontent.com/mertkayacs/ultramod/media/clips/secrets.gif" alt="Claude tries to read .env through grep and Ultra Mod refuses it with instructions"><br><b>Secrets.</b> A read of <code>.env</code> is refused, and Claude is told what to do instead.</td>

@@ -271,3 +271,20 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await ui.unmount()
   })
 }
+
+// The five set buttons need more cells than a narrow pane has, and a row that
+// never wraps clips the last choices, so the picker wraps onto a second line.
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`${surface} pane lets the set picker wrap below its natural width`, async ($, on) => {
+    world(on)
+    const ui = await $.ui.mount({ plugin: 'ultramod', surface, component: 'Pane', requestId: 'ultramod', props: paneProps(40) })
+    const nodes: RenderElement[] = []
+    walk(await ui.drawn(), nodes)
+    const picker = box(nodes, 'set-picker')
+    expect(cells(picker)).toBeGreaterThan(40)
+    expect(picker.props?.flexWrap).toBe('wrap')
+    const labels = (picker.children ?? []).filter(child => typeof child !== 'string' && child.type === 'Button').map(child => typeof child === 'string' || child.type !== 'Button' ? '' : child.props.label)
+    expect(labels).toEqual(['essentials', 'strict', 'flow', 'marathon', 'quiet'])
+    await ui.unmount()
+  })
+}

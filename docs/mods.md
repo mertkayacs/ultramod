@@ -100,6 +100,7 @@ Options: `Run it` / `Allow for session` / `Refuse`. In `claude -p`, on dismiss, 
 | device-redirect | `>` / `>>` onto `/dev/sd*`, `/dev/nvme*` | writes to a disk device | no |
 | pipe-to-shell | `curl\|wget ... \| sh\|bash` | pipes a download into a shell | no |
 | fork-bomb | `:(){ :|:& };:` pattern | exponential process bomb | no |
+| unchecked | commands nested deeper than the guard reads (substitutions or `sh -c` inside each other) | nests commands deeper than the guard can read | no |
 
 **Strict adds:**
 
@@ -118,7 +119,7 @@ Options: `Run it` / `Allow for session` / `Refuse`. In `claude -p`, on dismiss, 
 
 **Notifications:** A guard question and a marathon denial each raise the notify mod's `<project folder> needs you: ...` notification (`guard: run \`<cmd>\`?` or `guard: refused \`<cmd>\``), sent through the shared notifier in `core/notifier.ts` with the same rate limit and chime. They stay silent while the notify mod is off.
 
-**Undo net:** When the command is a destructive git or rm command inside a git work tree and the user picks `Run it`, first saves a snapshot of the work tree (untracked files included) without touching the index or work tree (temporary index via `GIT_INDEX_FILE`, `git add -A`, `write-tree`, `commit-tree`, then `update-ref refs/ultramod/snapshots/<iso-time>`). The question tells the user a snapshot will be saved.
+**Undo net:** When the command is a destructive git or rm command inside a git work tree and the user picks `Run it`, first saves a snapshot of the work tree (untracked files included) without touching the index or work tree (temporary index via `GIT_INDEX_FILE`, `git add -A`, `write-tree`, `commit-tree`, then `update-ref refs/worktree/ultramod/snapshots/<iso-time>`). The question tells the user a snapshot will be saved.
 
 `/ultra undo` lists snapshots (newest first, up to 20). `/ultra undo <n>` restores one into the work tree after a confirm (`git restore --source=<sha> --worktree -- .`), never deleting newer files.
 
@@ -194,7 +195,7 @@ Desktop notification when a main-loop turn that took longer than `notifyAfterSec
 
 **Body:** `<project folder> finished in 2m14s` or `<project folder> needs you: <short reason>`
 
-**Notifiers (detected once per session):** Linux `notify-send`, macOS `osascript`, Windows PowerShell toast, fallback `$.ui.toast`. Optional soft chime via `$.audio.play` with bundled asset (on in essentials). Never more than one notification per 10 seconds.
+**Notifiers (detected once per session):** Linux `notify-send`, macOS `osascript`, Windows PowerShell toast, fallback `$.ui.toast`. Optional soft chime via `$.audio.play` with a clip the notifier builds itself, so no binary asset has to survive an install (on in essentials). Never more than one notification per 10 seconds.
 
 ---
 

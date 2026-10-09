@@ -219,3 +219,84 @@ describe('loops warn mode toasts without context', () => {
     expect(w.toasts).toEqual(['Bash failed 3 times with the same error'])
   })
 })
+
+describe('loops edge cases', () => {
+  const context = (r: EventResult<'tool.call'>) => (r as { context?: string[] }).context
+
+  test('whitespace inside quotes keeps two commands apart', async () => {
+    const w = world()
+    const d = drive(w)
+    await d.run(bash("grep 'a  b' /missing"), failed('grep: /missing: No such file'))
+    await d.run(bash("grep 'a b' /missing"), failed('grep: /missing: No such file'))
+    const third = await d.run(bash("grep 'a   b' /missing"), failed('grep: /missing: No such file'))
+    expect(context(third)).toBeUndefined()
+    expect(w.toasts).toEqual([])
+  })
+
+  test('spaces around quoted arguments still collapse', async () => {
+    const w = world()
+    const d = drive(w)
+    await d.run(bash("grep  'a  b'   /missing"), failed('Error: x'))
+    await d.run(bash("grep 'a  b' /missing"), failed('Error: x'))
+    const third = await d.run(bash("  grep 'a  b'\t/missing "), failed('Error: x'))
+    expect(context(third)).toBeDefined()
+  })
+
+  test('failures without any diagnostic line are not counted as the same error', async () => {
+    const w = world()
+    const d = drive(w)
+    for (const text of ['', 'Exit code 1', undefined]) {
+      await d.run(bash('make'), { isError: true, result: { code: 1 }, text } as EventResult<'tool.call'>)
+    }
+    const fourth = await d.run(bash('make'), { isError: true, result: { code: 1 }, text: '' } as EventResult<'tool.call'>)
+    expect(context(fourth)).toBeUndefined()
+    expect(w.toasts).toEqual([])
+  })
+
+  test('a success lets a later failure streak nudge again', async () => {
+    const w = world()
+    const d = drive(w)
+    for (let i = 0; i < 3; i++) await d.run(bash('npm test'), failed('Error: x'))
+    expect(w.toasts).toHaveLength(1)
+    await d.run(bash('npm test'), passed())
+    await d.run(bash('npm test'), failed('Error: x'))
+    await d.run(bash('npm test'), failed('Error: x'))
+    const third = await d.run(bash('npm test'), failed('Error: x'))
+    expect(context(third)).toBeDefined()
+    expect(w.toasts).toHaveLength(2)
+  })
+
+  test('an edit success lets a later miss streak nudge again', async () => {
+    const w = world()
+    const d = drive(w)
+    const miss = () => ({ tool: 'Edit', file_path: '/work/a.ts', old_string: 'x', new_string: 'y' }) as unknown as Args<'tool.call'>
+    await d.run(miss(), failed('old_string was not found'))
+    await d.run(miss(), failed('old_string was not found'))
+    await d.run(miss(), passed())
+    await d.run(miss(), failed('old_string was not found'))
+    const second = await d.run(miss(), failed('old_string was not found'))
+    expect(context(second)).toBeDefined()
+    expect(w.toasts).toHaveLength(2)
+  })
+
+  test('an unrelated edit failure breaks the old_string streak', async () => {
+    const w = world()
+    const d = drive(w)
+    const edit = () => ({ tool: 'Edit', file_path: '/work/a.ts', old_string: 'x', new_string: 'y' }) as unknown as Args<'tool.call'>
+    await d.run(edit(), failed('old_string was not found'))
+    await d.run(edit(), failed('permission denied'))
+    const third = await d.run(edit(), failed('old_string was not found'))
+    expect(context(third)).toBeUndefined()
+    expect(w.toasts).toEqual([])
+  })
+
+  test('the failure memory is bounded', async () => {
+    const w = world()
+    const d = drive(w)
+    await d.run(bash('first'), failed('Error: x'))
+    await d.run(bash('first'), failed('Error: x'))
+    for (let i = 0; i < 300; i++) await d.run(bash(`other-${i}`), failed(`Error: ${i}`))
+    const third = await d.run(bash('first'), failed('Error: x'))
+    expect(context(third)).toBeUndefined()
+  })
+})
