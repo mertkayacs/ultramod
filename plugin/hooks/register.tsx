@@ -205,7 +205,7 @@ export const register: Register = (on, options) => {
   on('session.end', endSession)
   on('command.run', { command: 'ultra' }, runUltra)
   on('ui.render', { component: ['AbovePrompt', 'Pane'] }, render)
-  on('tool.call', { tool: ['Bash', 'Read', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'Grep', 'Glob'] }, checkToolCall).catch(refuseToolCall)
+  on('tool.call', { tool: /^(?:Bash|Read|Edit|MultiEdit|Write|NotebookEdit|Grep|Glob)$/ }, checkToolCall).catch(refuseToolCall)
   on('tool.call', watchToolCall)
   on('session.append', maskSecrets)
   on('prompt.compose', addPins)

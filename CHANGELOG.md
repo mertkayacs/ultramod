@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.7 (2026-10-09)
+
+### Fixes
+- hooks: the checked tools are named by an anchored pattern (`/^(?:Bash|Read|Edit|MultiEdit|Write|NotebookEdit|Grep|Glob)$/`) instead of a list, so the module typechecks against the tool declarations of any Claude Code build, including builds without Grep, Glob or MultiEdit. The same eight tools are checked
+
 ## 1.0.6 (2026-10-09)
 
 Fixes for the second review round on the claude-code-templates listing (cubic, 15 findings against 1.0.1). Each fix has a test that fails on 1.0.5.
