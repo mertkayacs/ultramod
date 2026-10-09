@@ -250,3 +250,178 @@ describe('tests passes strengthening and neutral edits', () => {
     expect(w.asked).toHaveLength(0)
   })
 })
+
+const notebook = (cells: { id: string; source: string | string[] }[]) =>
+  JSON.stringify({ cells: cells.map(cell => ({ cell_type: 'code', metadata: {}, outputs: [], ...cell })), nbformat: 4 })
+
+describe('tests checks new files and unreadable files (C31, C32, G09, G10)', () => {
+  test('Write of a new test file with a focus marker asks', async () => {
+    const w = world()
+    w.exists = () => false
+    const answer = await call(w, { tool: 'Write', file_path: 'new.test.ts', content: 'test.only("x", () => { expect(1).toBe(1) })' } as unknown as Args<'tool.call'>)
+    expect(answer).toMatchObject({ result: 'ran' })
+    expect(w.asked).toHaveLength(1)
+    expect(w.asked[0]?.question).toContain('.only(')
+  })
+
+  test('Write of a new test file with a skip marker is denied in marathon', async () => {
+    const w = world({ set: resolveSet({ set: 'marathon' }) })
+    w.exists = () => false
+    const answer = await call(w, { tool: 'Write', file_path: 'new.test.ts', content: 'it.skip("x", () => {})' } as unknown as Args<'tool.call'>)
+    expect(answer).toMatchObject({ deny: expect.stringContaining('.skip(') })
+  })
+
+  test('Write of a clean new test file still passes', async () => {
+    const w = world()
+    w.exists = () => false
+    expect(await call(w, { tool: 'Write', file_path: 'new.test.ts', content: 'test("x", () => { expect(1).toBe(1) })' } as unknown as Args<'tool.call'>)).toMatchObject({ result: 'ran' })
+    expect(w.asked).toHaveLength(0)
+  })
+
+  test('an existing test file that cannot be read asks instead of passing', async () => {
+    for (const input of [
+      { tool: 'Write', file_path: 'big.test.ts', content: '' },
+      { tool: 'Edit', file_path: 'big.test.ts', old_string: 'a', new_string: 'b' },
+      { tool: 'MultiEdit', file_path: 'big.test.ts', edits: [{ old_string: 'a', new_string: 'b' }] },
+      { tool: 'NotebookEdit', notebook_path: 'big.test.ipynb', new_source: 'x', cell_id: 'c1' },
+    ]) {
+      const w = world()
+      w.exists = () => true
+      w.$.fs.read = (async () => { throw new Error('file too large') }) as typeof w.$.fs.read
+      await call(w, input as unknown as Args<'tool.call'>)
+      expect(w.asked, input.tool).toHaveLength(1)
+      expect(w.asked[0]?.question, input.tool).toContain('could not be checked')
+    }
+  })
+
+  test('an unreadable test file is denied in marathon', async () => {
+    const w = world({ set: resolveSet({ set: 'marathon' }) })
+    w.exists = () => true
+    w.$.fs.read = (async () => { throw new Error('file too large') }) as typeof w.$.fs.read
+    const answer = await call(w, { tool: 'Write', file_path: 'big.test.ts', content: 'x' } as unknown as Args<'tool.call'>)
+    expect(answer).toMatchObject({ deny: expect.stringContaining('could not be checked') })
+  })
+
+  test('a failing existence check counts as an existing file', async () => {
+    const w = world()
+    w.$.fs.exists = (async () => { throw new Error('stat failed') }) as typeof w.$.fs.exists
+    w.$.fs.read = (async () => { throw new Error('read failed') }) as typeof w.$.fs.read
+    await call(w, { tool: 'Edit', file_path: 'src/app.test.ts', old_string: 'a', new_string: 'b' } as unknown as Args<'tool.call'>)
+    expect(w.asked).toHaveLength(1)
+  })
+
+  test('a check that throws asks instead of passing', async () => {
+    const w = world()
+    const e = { tool: 'Edit', file_path: 'src/app.test.ts', old_string: 'a' } as Record<string, unknown>
+    Object.defineProperty(e, 'new_string', { get: () => { throw new Error('boom') }, enumerable: true })
+    w.files.set('src/app.test.ts', 'a')
+    await call(w, e as unknown as Args<'tool.call'>)
+    expect(w.asked).toHaveLength(1)
+    expect(w.asked[0]?.question).toContain('could not be checked')
+  })
+})
+
+describe('tests compares notebook cells (C33)', () => {
+  const nbCall = (w: World, input: Record<string, unknown>) =>
+    call(w, { tool: 'NotebookEdit', notebook_path: 'nb.test.ipynb', ...input } as unknown as Args<'tool.call'>)
+
+  test('replacing a cell with fewer assertions asks', async () => {
+    const w = world()
+    w.files.set('nb.test.ipynb', notebook([{ id: 'c1', source: ['assert a == 1\n', 'assert b == 2'] }]))
+    await nbCall(w, { cell_id: 'c1', new_source: 'assert a == 1' })
+    expect(w.asked).toHaveLength(1)
+    expect(w.asked[0]?.question).toContain('assertion')
+  })
+
+  test('a cell that keeps an existing skip marker is not a new skip', async () => {
+    const w = world()
+    w.files.set('nb.test.ipynb', notebook([{ id: 'c1', source: '@pytest.mark.skip\ndef test_a(): pass' }]))
+    await nbCall(w, { cell_id: 'c1', new_source: '@pytest.mark.skip\ndef test_a(): assert 1' })
+    expect(w.asked).toHaveLength(0)
+  })
+
+  test('another cell with a marker does not hide a new one', async () => {
+    const w = world()
+    w.files.set('nb.test.ipynb', notebook([
+      { id: 'c1', source: 'def test_a(): assert 1' },
+      { id: 'c2', source: '@pytest.mark.skip\ndef test_b(): pass' },
+    ]))
+    await nbCall(w, { cell_id: 'c1', new_source: '@pytest.mark.skip\ndef test_a(): assert 1' })
+    expect(w.asked).toHaveLength(1)
+    expect(w.asked[0]?.question).toContain('@pytest.mark.skip')
+  })
+
+  test('inserting a cell with a marker asks and a clean insert passes', async () => {
+    const w = world()
+    w.files.set('nb.test.ipynb', notebook([{ id: 'c1', source: 'assert 1' }]))
+    await nbCall(w, { edit_mode: 'insert', new_source: 'xit("a")' })
+    expect(w.asked).toHaveLength(1)
+    const clean = world()
+    clean.files.set('nb.test.ipynb', notebook([{ id: 'c1', source: 'assert 1' }]))
+    expect(await nbCall(clean, { edit_mode: 'insert', new_source: 'assert 2' })).toMatchObject({ result: 'ran' })
+    expect(clean.asked).toHaveLength(0)
+  })
+
+  test('a strengthening replace passes', async () => {
+    const w = world()
+    w.files.set('nb.test.ipynb', notebook([{ id: 'c1', source: 'assert 1' }]))
+    expect(await nbCall(w, { cell_id: 'c1', new_source: 'assert 1\nassert 2' })).toMatchObject({ result: 'ran' })
+    expect(w.asked).toHaveLength(0)
+  })
+})
+
+describe('tests deny mode notifies an away user (C34)', () => {
+  test('a refusal sends the needs-you notification', async () => {
+    const w = world({ set: resolveSet({ set: 'marathon' }) })
+    w.files.set('src/app.test.ts', 'test("a", () => { expect(1).toBe(1) })')
+    const answer = await call(w, editTest('test("a"', 'test.skip("a"'))
+    await settle()
+    expect(answer).toMatchObject({ deny: expect.any(String) })
+    expect(w.asked).toHaveLength(0)
+    expect(w.argvs.filter(argv => argv[0] === 'notify-send')).toEqual([
+      ['notify-send', 'Claude Code', 'project needs you: tests: src/app.test.ts adds .skip('],
+    ])
+  })
+})
+
+describe('tests remembers an approved call (C35)', () => {
+  const approve = (w: World, id: string) => {
+    w.files.set('src/app.test.ts', 'test("a", () => { expect(1).toBe(1) })')
+    return call(w, { ...editTest('test("a"', 'test.skip("a"'), tool_use_id: id } as unknown as Args<'tool.call'>)
+  }
+
+  function check(w: World, id: string | undefined, verdict: 'ask' | 'allow' | 'deny' = 'ask') {
+    const dispatcher = createDispatcher([tests], enabled)
+    const calls = { count: 0 }
+    const e = { tool: 'Edit', input: {}, tool_use_id: id } as unknown as Args<'tool.check'>
+    return dispatcher.dispatch(w.$, 'tool.check', e, bottom('tool.check', { decision: verdict } as EventResult<'tool.check'>, calls))
+  }
+
+  test('the engine ask for an approved call is answered with allow', async () => {
+    const w = world()
+    await approve(w, 'toolu_1')
+    expect(await check(w, 'toolu_1')).toEqual({ decision: 'allow' })
+  })
+
+  test('another call and a deny verdict are untouched', async () => {
+    const w = world()
+    await approve(w, 'toolu_1')
+    expect(await check(w, 'toolu_2')).toEqual({ decision: 'ask' })
+    expect(await check(w, 'toolu_1', 'deny')).toEqual({ decision: 'deny' })
+    expect(await check(w, undefined)).toEqual({ decision: 'ask' })
+  })
+
+  test('a refused call is not remembered', async () => {
+    const w = world()
+    w.askAnswer = () => 'Refuse'
+    await approve(w, 'toolu_1')
+    expect(await check(w, 'toolu_1')).toEqual({ decision: 'ask' })
+  })
+
+  test('nothing is remembered when no dialog ran', async () => {
+    const w = world()
+    w.files.set('src/app.test.ts', 'const a = 1')
+    await call(w, { ...editTest('1', '2'), tool_use_id: 'toolu_9' } as unknown as Args<'tool.call'>)
+    expect(await check(w, 'toolu_9')).toEqual({ decision: 'ask' })
+  })
+})
