@@ -15,6 +15,8 @@ test('userConfig entries use only keys that every supported Claude Code accepts'
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const market = JSON.parse(readFileSync(new URL('../.claude-plugin/marketplace.json', import.meta.url), 'utf8'));
+// Catalogs that only look for a root manifest read this copy; the marketplace still installs ./plugin.
+const rootManifest = JSON.parse(readFileSync(new URL('../.claude-plugin/plugin.json', import.meta.url), 'utf8'));
 const commands = readFileSync(new URL('../plugin/hooks/core/commands.ts', import.meta.url), 'utf8');
 
 test('the version is the same in package.json, plugin.json and /ultra doctor', () => {
@@ -26,4 +28,10 @@ test('the listing description is the same everywhere', () => {
   assert.equal(market.description, manifest.description);
   assert.equal(market.plugins[0].description, manifest.description);
   assert.equal(pkg.description, manifest.description);
+});
+
+test('the root plugin.json mirrors the plugin metadata and declares no components', () => {
+  const metadata = ['name', 'version', 'description', 'author', 'homepage', 'repository', 'license', 'keywords'];
+  assert.deepEqual(Object.keys(rootManifest), metadata);
+  for (const key of metadata) assert.deepEqual(rootManifest[key], manifest[key], key);
 });
