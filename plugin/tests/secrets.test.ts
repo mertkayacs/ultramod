@@ -219,7 +219,8 @@ describe('secrets redacts stored rows', () => {
     const w = world()
     const dispatcher = createDispatcher([secrets], enabled)
     const calls = { count: 0 }
-    const e = appendMessage('token ghp_AbCdEf0123456789AbCdEf0123456789AbCdEf0123 end')
+    // Split so secret scanners reading this repo do not flag the fake token.
+    const e = appendMessage('token ghp' + '_AbCdEf0123456789AbCdEf0123456789AbCdEf0123 end')
     const echo = echoNext(calls)
     const answer = (await dispatcher.dispatch(w.$, 'session.append', e, echo)) as { message: typeof e.message }
     const block = answer.message.content[0] as unknown as { content: { type: string; text: string }[] }
@@ -232,7 +233,7 @@ describe('secrets redacts stored rows', () => {
     const w = world()
     const dispatcher = createDispatcher([secrets], enabled)
     const calls = { count: 0 }
-    const text = 'token ghp_AbCdEf0123456789AbCdEf0123456789AbCdEf0123 end'
+    const text = 'token ghp' + '_AbCdEf0123456789AbCdEf0123456789AbCdEf0123 end'
     for (const door of ['prompt', 'response'] as const) {
       const e = appendMessage(text, door)
       const answer = await dispatcher.dispatch(w.$, 'session.append', e, echoNext(calls))
@@ -246,7 +247,7 @@ describe('secrets redacts stored rows', () => {
     const w = world()
     const dispatcher = createDispatcher([secrets], enabled)
     const calls = { count: 0 }
-    const e = appendMessage('token ghp_AbCdEf0123456789AbCdEf0123456789AbCdEf0123 end', 'tool-message')
+    const e = appendMessage('token ghp' + '_AbCdEf0123456789AbCdEf0123456789AbCdEf0123 end', 'tool-message')
     const answer = (await dispatcher.dispatch(w.$, 'session.append', e, echoNext(calls))) as { message: typeof e.message }
     const block = answer.message.content[0] as unknown as { content: { type: string; text: string }[] }
     expect(block.content[0]?.text).toBe('token [redacted:github] end')
@@ -277,7 +278,7 @@ describe('secrets redacts stored rows', () => {
     ;(w.$ as unknown as { ui: { log: (text: string) => void } }).ui.log = () => { throw new Error('log failed') }
     const dispatcher = createDispatcher([secrets], enabled)
     const calls = { count: 0 }
-    const e = appendMessage('key sk-ant-api03-AbCdEf0123456789AbCdEf0123456789AbCdEf01')
+    const e = appendMessage('key sk-' + 'ant-api03-AbCdEf0123456789AbCdEf0123456789AbCdEf01')
     const answer = (await dispatcher.dispatch(w.$, 'session.append', e, echoNext(calls))) as { message: typeof e.message }
     const block = answer.message.content[0] as unknown as { content: { type: string; text: string }[] }
     expect(block.content[0]?.text).toContain('[redacted:anthropic]')
@@ -347,7 +348,7 @@ describe('secrets Bash decision uses the allowlist matching (C10)', () => {
 })
 
 describe('secrets sanitizes what a later hook sends to the model (C11)', () => {
-  const token = 'ghp_AbCdEf0123456789AbCdEf0123456789AbCdEf0123'
+  const token = 'ghp' + '_AbCdEf0123456789AbCdEf0123456789AbCdEf0123'
 
   function downstream(w: World, e: Args<'tool.call'>, answer: EventResult<'tool.call'>): Promise<EventResult<'tool.call'>> {
     const dispatcher = createDispatcher([secrets], enabled)
