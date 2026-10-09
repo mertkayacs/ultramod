@@ -9,26 +9,40 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0F6B66.svg" alt="MIT"></a>
 </p>
 
-<p align="center"><img src="https://raw.githubusercontent.com/mertkayacs/ultramod/media/demo.gif" alt="Claude Code with Ultra Mod: the HUD above the prompt, a receipt under the answer, the guard holding git reset --hard, /ultra undo restoring the work, a refused .env read and the control pane" width="900"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/mertkayacs/ultramod/media/trailer-hero.gif" alt="Ultra Mod in Claude Code: limits and context above the prompt, a receipt under the answer, the guard holding git reset --hard and /ultra undo bringing the work back" width="900"></p>
 
 ## Install
 
 You need Claude Code 2.1.287 or later (the first release with mods).
 
-In your shell:
+Ultra Mod installs from its own marketplace on GitHub. Inside Claude Code, one command adds the marketplace and installs the plugin:
+
+```text
+/plugin install ultramod --marketplace mertkayacs/ultramod
+```
+
+From your shell, the same in one line:
+
+```bash
+claude plugin install ultramod --marketplace mertkayacs/ultramod
+```
+
+Or in two steps, which also works on older 2.1.28x releases:
 
 ```bash
 claude plugin marketplace add mertkayacs/ultramod
 claude plugin install ultramod@ultramod
 ```
 
-Or let the installer check your version and run those two lines for you:
+The npm installer checks your Claude Code version and runs those steps for you:
 
 ```bash
 npx ultramod
 ```
 
 Open Claude Code and type `/ultra`. The defaults work as they are; `/plugin configure ultramod@ultramod` changes the default set, the notification delay and the sound.
+
+**`Plugin "ultramod" not found in any configured marketplace`?** Claude Code searches only the marketplaces you have added, and Ultra Mod is not in Anthropic's built-in directory yet. Add the marketplace with one of the commands above and install again.
 
 ## Why Ultra Mod
 
@@ -52,6 +66,10 @@ Most Claude Code setups grow the same pile of extras: a status line script for u
 Ultra Mod calls no model itself, and `claude plugin details ultramod` reports about 0 always-on tokens. It still adds some text to what Claude reads: the lines of `.claude/pins.md` (at most 30 lines and 3,000 characters) go into the system prompt of every request while the file exists, and a refusal or a loop nudge is a short message in the conversation. Compaction runs the normal `/compact`, from the Compact now button or, in the marathon set, by itself at 88%.
 
 ## See it
+
+One real session, start to finish:
+
+<p align="center"><img src="https://raw.githubusercontent.com/mertkayacs/ultramod/media/demo.gif" alt="Claude Code with Ultra Mod: the HUD above the prompt, a receipt under the answer, the guard holding git reset --hard, /ultra undo restoring the work, a refused .env read and the control pane" width="900"></p>
 
 <table>
   <tr>

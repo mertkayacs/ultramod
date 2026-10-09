@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.3 (2026-10-09)
+
+### Fixes
+- install: the plugin manifest no longer uses the `options` key on the default-set setting, which some Claude Code releases reject with `userConfig.set: Unrecognized key: "options"`; the allowed set names are listed in the description and still checked by the plugin
+- docs: install with one command (`/plugin install ultramod --marketplace mertkayacs/ultramod`), and what to do about `Plugin "ultramod" not found in any configured marketplace`
+
 ## 1.0.2 (2026-10-09)
 
 ### Fixes
