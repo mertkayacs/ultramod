@@ -155,3 +155,80 @@ test('instructions keep at most 30 files and stay within 2000 characters', () =>
 test('an empty history still asks for the task to be kept', () => {
   expect(compactInstructions([])).toBe(KEEP)
 })
+
+test('a clear drops the old receipts from the next summary', async ($, on) => {
+  const { usage, instructions } = world(on, 50)
+  await turn($, 't1', usage, 50)
+  await $.classic.SessionStart({ source: 'clear' })
+  await turn($, 't2', usage, 85)
+  const ui = await $.ui.mount({ plugin: 'ultramod', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  await ui.press({ key: 'compact-now' })
+  await ui.unmount()
+  expect(instructions).toHaveLength(1)
+  expect(instructions[0]).toContain('/work/t2.ts')
+  expect(instructions[0]).not.toContain('/work/t1.ts')
+})
+
+test('a fork keeps the receipts', async ($, on) => {
+  const { usage, instructions } = world(on, 50)
+  await turn($, 't1', usage, 50)
+  await $.classic.SessionStart({ source: 'fork' })
+  await turn($, 't2', usage, 85)
+  const ui = await $.ui.mount({ plugin: 'ultramod', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  await ui.press({ key: 'compact-now' })
+  await ui.unmount()
+  expect(instructions[0]).toContain('/work/t1.ts')
+})
+
+test('auto compaction does not queue again while the context stays above the line', { options: { set: 'marathon' } }, async ($, on) => {
+  const { clock, usage, instructions } = world(on, 90)
+  await turn($, 't1', usage, 90)
+  await clock.settle()
+  expect(instructions).toHaveLength(1)
+  await turn($, 't2', usage, 90)
+  await clock.settle()
+  await turn($, 't3', usage, 92)
+  await clock.settle()
+  expect(instructions).toHaveLength(1)
+  // Back under the line, the next climb compacts again.
+  await turn($, 't4', usage, 40)
+  await clock.settle()
+  await turn($, 't5', usage, 90)
+  await clock.settle()
+  expect(instructions).toHaveLength(2)
+})
+
+test('a failed auto compaction is tried again on the next turn', { options: { set: 'marathon' } }, async ($, on) => {
+  const { clock, usage, instructions, failures } = world(on, 90)
+  failures.compact = true
+  await turn($, 't1', usage, 90)
+  await clock.settle()
+  expect(instructions).toEqual([])
+  failures.compact = false
+  await turn($, 't2', usage, 90)
+  await clock.settle()
+  expect(instructions).toHaveLength(1)
+})
+
+test('the warning comes back after the context drops and climbs again', async ($, on) => {
+  const { usage, toasts, flags } = world(on, 50)
+  await turn($, 't1', usage, 75)
+  expect(toasts).toHaveLength(1)
+  await turn($, 't2', usage, 80)
+  expect(toasts).toHaveLength(1)
+  await turn($, 't3', usage, 40)
+  expect(flags.at(-1)).toEqual({ warned: false, offered: false })
+  await turn($, 't4', usage, 75)
+  expect(toasts).toHaveLength(2)
+})
+
+test('a successful compaction starts the warning cycle over', async ($, on) => {
+  const { usage, toasts } = world(on, 50)
+  await turn($, 't1', usage, 86)
+  expect(toasts).toHaveLength(1)
+  const ui = await $.ui.mount({ plugin: 'ultramod', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  await ui.press({ key: 'compact-now' })
+  await ui.unmount()
+  await turn($, 't2', usage, 86)
+  expect(toasts).toHaveLength(2)
+})

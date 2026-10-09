@@ -194,7 +194,7 @@ Desktop notification when a main-loop turn that took longer than `notifyAfterSec
 
 **Body:** `<project folder> finished in 2m14s` or `<project folder> needs you: <short reason>`
 
-**Notifiers (detected once per session):** Linux `notify-send`, macOS `osascript`, Windows PowerShell toast, fallback `$.ui.toast`. Optional soft chime via `$.audio.play` with bundled asset (on in essentials). Never more than one notification per 10 seconds.
+**Notifiers (detected once per session):** Linux `notify-send`, macOS `osascript`, Windows PowerShell toast, fallback `$.ui.toast`. Optional soft chime via `$.audio.play` with a clip the notifier builds itself, so no binary asset has to survive an install (on in essentials). Never more than one notification per 10 seconds.
 
 ---
 

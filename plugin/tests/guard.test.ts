@@ -40,6 +40,8 @@ function world(on: On, set?: UltraSet) {
   })
   on('tool.check', () => state.verdict)
   on('process.run', ($, e) => {
+    // The away notification probes the platform as soon as a dialog opens; it is not part of the git sequence.
+    if (['uname', 'which', 'notify-send'].includes(String(e.argv[0]))) return bad()
     state.runs.push({ argv: e.argv, init: e.init })
     const argv = e.argv as string[]
     const [a0, a1, a2] = argv
