@@ -5,6 +5,7 @@
 <p align="center">
   <a href="https://github.com/mertkayacs/ultramod/actions/workflows/ci.yml"><img src="https://github.com/mertkayacs/ultramod/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://www.npmjs.com/package/ultramod"><img src="https://img.shields.io/npm/v/ultramod.svg" alt="npm"></a>
+  <a href="https://ultramod.mertkayacs.com"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fultramod.mertkayacs.com%2Fdownloads.json" alt="downloads on all platforms"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0F6B66.svg" alt="MIT"></a>
 </p>
 
