@@ -25,7 +25,7 @@ function world(on: On, set?: UltraSet) {
     // What the engine answers tool.check: allow unless a test says otherwise.
     verdict: { decision: 'allow' } as { decision: 'allow' | 'ask' | 'deny'; reason?: string },
     head: 'head123' as string | null, inside: true, failSubcommands: [] as string[],
-    refList: '', snapshotList: '', lsTree: 'src/a.ts\nsrc/b.ts\n', refuseRefs: 0,
+    refList: '', snapshotList: '', lsTree: 'src/a.ts\nsrc/b.ts\n', nowFiles: '', refuseRefs: 0,
   }
   on('session.root', () => ({ value: '/work' }))
   on('session.cwd', () => ({ value: '/work' }))
@@ -58,6 +58,7 @@ function world(on: On, set?: UltraSet) {
       if (a1 === 'update-ref') return ok('')
       if (a1 === 'for-each-ref') return ok(argv.some(arg => arg.includes('%(refname)')) ? state.refList : state.snapshotList)
       if (a1 === 'ls-tree') return ok(state.lsTree)
+      if (a1 === 'ls-files') return ok(argv.includes('--others') ? '' : state.nowFiles)
       if (a1 === 'restore' || a1 === 'read-tree' || a1 === 'checkout-index') return ok('')
     }
     if (a0 === 'rm' || a0 === 'cmd') return ok('')
@@ -99,14 +100,15 @@ test('ask mode with Run it snapshots then runs, with the exact git sequence', as
   }])
   expect(state.runs.map(run => ({ argv: run.argv, init: run.init }))).toEqual([
     { argv: ['git', 'rev-parse', '--is-inside-work-tree'], init: { cwd: '/work' } },
+    { argv: ['git', 'rev-parse', '--show-toplevel'], init: { cwd: '/work' } },
     { argv: ['git', 'rev-parse', '--git-path', 'ultramod-index'], init: { cwd: '/work' } },
     { argv: ['git', 'rev-parse', '--verify', 'HEAD'], init: { cwd: '/work' } },
     { argv: ['git', 'add', '-A'], init: { cwd: '/work', env: { GIT_INDEX_FILE: '.git/ultramod-index' } } },
     { argv: ['git', 'write-tree'], init: { cwd: '/work', env: { GIT_INDEX_FILE: '.git/ultramod-index' } } },
     { argv: ['git', 'commit-tree', 'tree123', '-p', 'head123', '-m', 'ultramod snapshot: git reset --hard'], init: { cwd: '/work' } },
-    { argv: ['git', 'update-ref', 'refs/ultramod/snapshots/19700101-000000-000', 'commit123', ''], init: { cwd: '/work' } },
+    { argv: ['git', 'update-ref', 'refs/worktree/ultramod/snapshots/19700101-000000-000', 'commit123', ''], init: { cwd: '/work' } },
     { argv: ['rm', '-f', '.git/ultramod-index'], init: { cwd: '/work' } },
-    { argv: ['git', 'for-each-ref', '--sort=-committerdate', '--sort=-refname', '--format=%(refname)', 'refs/ultramod/snapshots/'], init: { cwd: '/work' } },
+    { argv: ['git', 'for-each-ref', '--sort=-committerdate', '--sort=-refname', '--format=%(refname)', 'refs/worktree/ultramod/snapshots/'], init: { cwd: '/work' } },
   ])
 })
 
@@ -238,6 +240,15 @@ test('/ultra allow lists ids, allows one and defers paths', async ($, on) => {
   expect(state.allow).toEqual({ risks: ['git-clean'], paths: [] })
 })
 
+// Round 2: a name with no slash is still a file when it has a dot or names a secret file.
+test('/ultra allow leaves file names to the secrets mod', async ($, on) => {
+  const { state } = world(on)
+  for (const name of ['server.pem', 'id_rsa', 'Makefile', '"server.pem"', '.env', '~/key']) {
+    expect((await $.command.run(command(`allow ${name}`))).text ?? '').not.toMatch(/allowed for this session/)
+  }
+  expect(state.allow.risks).toEqual([])
+})
+
 test('/ultra undo lists snapshots newest first', async ($, on) => {
   const { clock, state } = world(on)
   state.snapshotList = 'sha2\t120\tultramod snapshot: git reset --hard\nsha1\t30\tultramod snapshot: rm -rf src\n'
@@ -261,9 +272,13 @@ test('/ultra undo <n> restores after a confirm and keeps newer files', async ($,
   const answer = await $.command.run(command('undo 1'))
   expect(answer.text).toBe('Restored snapshot 1: 2 files (src/a.ts, src/b.ts). Files created after it were kept.')
   expect(state.runs.map(run => ({ argv: run.argv, init: run.init }))).toEqual([
-    { argv: ['git', 'for-each-ref', '--sort=-committerdate', '--sort=-refname', '--format=%(objectname)%09%(committerdate:unix)%09%(contents:subject)', 'refs/ultramod/snapshots/'], init: { cwd: '/work' } },
+    { argv: ['git', 'for-each-ref', '--sort=-committerdate', '--sort=-refname', '--format=%(objectname)%09%(committerdate:unix)%09%(contents:subject)', 'refs/worktree/ultramod/snapshots/'], init: { cwd: '/work' } },
     { argv: ['git', 'rev-parse', '--show-toplevel'], init: { cwd: '/work' } },
     { argv: ['git', 'rev-parse', '--git-path', 'ultramod-restore-index'], init: { cwd: '/work' } },
+    { argv: ['git', 'add', '-A'], init: { cwd: '/work', env: { GIT_INDEX_FILE: '.git/ultramod-index' } } },
+    { argv: ['git', 'ls-files', '-z'], init: { cwd: '/work', env: { GIT_INDEX_FILE: '.git/ultramod-index' } } },
+    { argv: ['git', 'ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'], init: { cwd: '/work' } },
+    { argv: ['git', 'ls-tree', '-r', '-z', '--name-only', '--full-tree', 'sha9'], init: { cwd: '/work' } },
     { argv: ['git', 'read-tree', 'sha9'], init: { cwd: '/work', env: { GIT_INDEX_FILE: '.git/ultramod-index' } } },
     { argv: ['git', 'checkout-index', '--all', '--force'], init: { cwd: '/work', env: { GIT_INDEX_FILE: '.git/ultramod-index' } } },
     { argv: ['rm', '-f', '.git/ultramod-index'], init: { cwd: '/work' } },
@@ -283,7 +298,7 @@ test('/ultra undo cancel and a bad number restore nothing', async ($, on) => {
 
 test('guard prunes snapshots beyond the newest twenty', async ($, on) => {
   const { state } = world(on)
-  state.refList = new Array(21).fill(0).map((_, i) => `refs/ultramod/snapshots/old${i}`).join('\n')
+  state.refList = new Array(21).fill(0).map((_, i) => `refs/worktree/ultramod/snapshots/old${i}`).join('\n')
   state.answers.push('Run it')
   await $.tool.call(bash('git reset --hard'))
   const pruned = argvOnly(state.runs).filter(argv => argv[1] === 'update-ref' && argv[2] === '-d')
@@ -387,7 +402,7 @@ test('snapshots a few milliseconds apart get different refs', async ($, on) => {
   await clock.set(1_000_450)
   await $.tool.call(bash('git clean -f'))
   const refs = argvOnly(state.runs).filter(argv => argv[1] === 'update-ref' && argv[2] !== '-d').map(argv => argv[2])
-  expect(refs).toEqual(['refs/ultramod/snapshots/19700101-001640-000', 'refs/ultramod/snapshots/19700101-001640-450'])
+  expect(refs).toEqual(['refs/worktree/ultramod/snapshots/19700101-001640-000', 'refs/worktree/ultramod/snapshots/19700101-001640-450'])
 })
 
 test('a ref that already exists is not replaced: the next suffix is tried', async ($, on) => {
@@ -397,9 +412,9 @@ test('a ref that already exists is not replaced: the next suffix is tried', asyn
   await $.tool.call(bash('git reset --hard'))
   const tries = argvOnly(state.runs).filter(argv => argv[1] === 'update-ref' && argv[2] !== '-d').map(argv => argv[2])
   expect(tries).toEqual([
-    'refs/ultramod/snapshots/19700101-000000-000',
-    'refs/ultramod/snapshots/19700101-000000-000-1',
-    'refs/ultramod/snapshots/19700101-000000-000-2',
+    'refs/worktree/ultramod/snapshots/19700101-000000-000',
+    'refs/worktree/ultramod/snapshots/19700101-000000-000-1',
+    'refs/worktree/ultramod/snapshots/19700101-000000-000-2',
   ])
   expect(state.logs).toEqual([])
 })
@@ -437,4 +452,25 @@ test('a snapshot commit message carries the redacted command', async ($, on) => 
   await $.tool.call(bash(`git reset --hard # ${TOKEN}`))
   const commit = argvOnly(state.runs).find(argv => argv[1] === 'commit-tree') ?? []
   expect(commit.join(' ')).not.toContain(TOKEN)
+})
+
+// Round 2: git reports the index path with forward slashes, which cmd's del reads as a switch.
+test('on Windows the temporary index is removed with a native path', async ($, on) => {
+  const { state } = world(on)
+  on('env.get', () => ({ value: 'Windows_NT' }))
+  state.answers.push('Run it')
+  await $.tool.call(bash('git reset --hard'))
+  expect(argvOnly(state.runs)).toContainEqual(['cmd', '/c', 'del', '/f', '/q', '.git\\ultramod-index'])
+  expect(argvOnly(state.runs).some(argv => argv[0] === 'rm')).toBe(false)
+})
+
+test('/ultra undo names the paths that block a restore and writes nothing', async ($, on) => {
+  const { state } = world(on)
+  state.snapshotList = 'sha9\t60\tultramod snapshot: rm -rf cfg\n'
+  state.answers.push('Restore')
+  state.nowFiles = 'cfg\0other.txt\0'
+  state.lsTree = 'cfg/app.txt\0other.txt\0'
+  const answer = await $.command.run(command('undo 1'))
+  expect(answer.text).toMatch(/^Snapshot 1 was not restored: cfg is a file where the snapshot has a directory/)
+  expect(argvOnly(state.runs).some(argv => argv[1] === 'checkout-index' || argv[1] === 'read-tree')).toBe(false)
 })

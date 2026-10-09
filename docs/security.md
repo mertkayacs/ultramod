@@ -42,7 +42,7 @@ The core outside the mods also calls `$.store.get`/`$.store.set` (the per-projec
 |-----|-------|--------|
 | hud | none (uses `$.state`) | none (uses `$.state`) |
 | receipts | none (uses `$.state`) | none (uses `$.state`) |
-| guard | `.git` (via `git` commands) | `refs/ultramod/snapshots/*` (git refs), temporary git index file under `.git` |
+| guard | `.git` (via `git` commands) | `refs/worktree/ultramod/snapshots/*` (git refs), temporary git index file under `.git` |
 | secrets | none (blocks reads before they happen) | none |
 | tests | test files (via `$.fs.read`) | none |
 | notify | none | none |

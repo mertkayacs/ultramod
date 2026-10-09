@@ -37,7 +37,7 @@ It only asks before creating new documentation files outside the allowlist (READ
 See docs/mods.md for the full risk table. Essentials catches recursive rm outside safe dirs, git reset --hard, git clean -f, git checkout/restore discard, git push --force, git branch -D, git stash drop, git filter-branch/repo, SQL drop/truncate/delete without where, docker prune, kubectl delete, terraform destroy, chmod -R 777, mkfs, dd to devices, redirect to disk devices, curl|wget piped to shell, fork bombs.
 
 ### What does the snapshot save?
-For destructive git or rm commands inside a git work tree: the work tree (including untracked files) via a temporary index, committed to `refs/ultramod/snapshots/<iso-time>`. The real index and work tree are never touched. Up to 20 snapshots kept.
+For destructive git or rm commands inside a git work tree: the work tree (including untracked files) via a temporary index, committed to `refs/worktree/ultramod/snapshots/<iso-time>`. The real index and work tree are never touched. Up to 20 snapshots kept.
 
 ### How do I restore?
 `/ultra undo` lists snapshots. `/ultra undo <n>` restores after a confirm. Files created after the snapshot are kept.

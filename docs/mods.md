@@ -118,7 +118,7 @@ Options: `Run it` / `Allow for session` / `Refuse`. In `claude -p`, on dismiss, 
 
 **Notifications:** A guard question and a marathon denial each raise the notify mod's `<project folder> needs you: ...` notification (`guard: run \`<cmd>\`?` or `guard: refused \`<cmd>\``), sent through the shared notifier in `core/notifier.ts` with the same rate limit and chime. They stay silent while the notify mod is off.
 
-**Undo net:** When the command is a destructive git or rm command inside a git work tree and the user picks `Run it`, first saves a snapshot of the work tree (untracked files included) without touching the index or work tree (temporary index via `GIT_INDEX_FILE`, `git add -A`, `write-tree`, `commit-tree`, then `update-ref refs/ultramod/snapshots/<iso-time>`). The question tells the user a snapshot will be saved.
+**Undo net:** When the command is a destructive git or rm command inside a git work tree and the user picks `Run it`, first saves a snapshot of the work tree (untracked files included) without touching the index or work tree (temporary index via `GIT_INDEX_FILE`, `git add -A`, `write-tree`, `commit-tree`, then `update-ref refs/worktree/ultramod/snapshots/<iso-time>`). The question tells the user a snapshot will be saved.
 
 `/ultra undo` lists snapshots (newest first, up to 20). `/ultra undo <n>` restores one into the work tree after a confirm (`git restore --source=<sha> --worktree -- .`), never deleting newer files.
 

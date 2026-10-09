@@ -63,7 +63,8 @@ const runner = ($: UltraApi): GitRun => (argv, cwd, env) => git($, cwd, argv, en
 
 const remover = ($: UltraApi): DropFile => async (cwd, path) => {
   const windows = await $.env.get('OS').then(value => value === 'Windows_NT', () => false)
-  await git($, cwd, windows ? ['cmd', '/c', 'del', path] : ['rm', '-f', path])
+  // git reports the path with forward slashes, which `del` reads as a switch.
+  await git($, cwd, windows ? ['cmd', '/c', 'del', '/f', '/q', path.split('/').join('\\')] : ['rm', '-f', path])
 }
 
 async function snapshot($: UltraApi, command: string): Promise<void> {
@@ -84,10 +85,11 @@ async function listSnapshots($: UltraApi): Promise<Snapshot[]> {
   }).filter(snap => snap.sha)
 }
 
-// A risk id never carries slashes, dots or a home prefix; those mark a path,
-// which the secrets mod answers after guard defers with null.
-const looksLikePath = (value: string) =>
-  value.includes('/') || value.includes('\\') || value.startsWith('.') || value.startsWith('~')
+// A risk id is lowercase words joined by hyphens (git-clean). Anything else,
+// a name with a dot or underscore such as server.pem or id_rsa, or a path, is
+// left to the secrets mod, which the null answer defers to.
+const RISK_ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
+const looksLikeRiskId = (value: string) => RISK_ID.test(value)
 
 async function allowIds($: UltraApi): Promise<string[]> {
   return (await read($, allow)).risks
@@ -166,7 +168,7 @@ export const guard: UltraMod = {
         const risks = await allowIds($)
         return { text: risks.length ? `Allowed this session: ${risks.join(', ')}` : 'No risk ids are allowed this session. Use /ultra allow <risk id>.' }
       }
-      if (looksLikePath(value)) return null
+      if (!looksLikeRiskId(value)) return null
       await update($, allow, held => addAllowedRisk(held, value))
       return { text: `${value} is allowed for this session.` }
     },
@@ -195,7 +197,13 @@ export const guard: UltraMod = {
       const cwd = await $.session.cwd()
       const root = await git($, cwd, ['git', 'rev-parse', '--show-toplevel'])
       const target = root.ok && root.out ? root.out : cwd
-      const restored = await restoreSnapshot(runner($), remover($), target, snap.sha)
+      let conflicts: string[] = []
+      const restored = await restoreSnapshot(runner($), remover($), target, snap.sha, paths => { conflicts = paths })
+      if (conflicts.length) {
+        const shown = conflicts.slice(0, 5).join(', ')
+        const more = conflicts.length > 5 ? ` and ${conflicts.length - 5} more` : ''
+        return { text: `Snapshot ${index} was not restored: ${shown}${more} ${conflicts.length === 1 ? 'is' : 'are'} a file where the snapshot has a directory, or a directory where it has a file, and writing it back would delete newer work. Move ${conflicts.length === 1 ? 'it' : 'them'} aside and run /ultra undo ${index} again.` }
+      }
       if (!restored) return { text: `Could not restore snapshot ${index}: git could not finish writing the files. Check git status.` }
       const files = await git($, target, ['git', 'ls-tree', '-r', '--name-only', '--full-tree', snap.sha])
       const names = files.ok ? files.out.split('\n').filter(Boolean) : []
