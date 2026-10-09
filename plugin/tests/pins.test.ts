@@ -1,8 +1,8 @@
-import { expect, test, describe } from 'claude-code/testing'
+import { describe, expect, mock, test } from 'claude-code/testing'
 import type { Args, EventResult, Frozen } from 'claude-code'
 import type { UltraApi } from '../hooks/core/api'
-import { createDispatcher } from '../hooks/core/dispatcher'
-import type { ModEvent, ModNext } from '../hooks/core/mod'
+import { createDriver } from './drive'
+import type { Beneath, DriveEvent } from './drive'
 import { pins, resetPinsCache } from '../hooks/mods/pins'
 
 const enabled = { enabled: async () => true }
@@ -58,7 +58,8 @@ function world(init: { env?: Record<string, string | undefined> } = {}): World {
         if (!w.files.has(path)) throw new Error('missing file')
         return w.files.get(path) ?? ''
       },
-      write: async (path: string, text: string) => { w.writes.push({ path, text }) },
+      // As the facade in register.tsx writes it: the pins file under the root.
+      writePins: async (root: string, text: string) => { w.writes.push({ path: `${root}/.claude/pins.md`, text }) },
       stat: async (path: string) => {
         w.statCalls.push(path)
         const stat = w.stats.get(path)
@@ -78,19 +79,17 @@ function world(init: { env?: Record<string, string | undefined> } = {}): World {
 
 const ENGINE_SECTIONS: EventResult<'prompt.compose'>['sections'] = [{ id: 'engine:intro', text: 'intro', scope: 'shared' }]
 
-function bottom<E extends ModEvent>(event: E, answer: EventResult<E>, calls: { count: number }): ModNext<E> {
-  const next = Object.assign(async (_e: Frozen<Args<E>> | Args<E>) => {
+function bottom<E extends DriveEvent>(_event: E, answer: EventResult<E>, calls: { count: number }): Beneath<E> {
+  return async () => {
     calls.count += 1
     return answer
-  }, { event, signal: undefined })
-  Object.defineProperty(next, 'called', { get: () => calls.count > 0 })
-  return next as unknown as ModNext<E>
+  }
 }
 
 function compose(w: World): Promise<EventResult<'prompt.compose'>> {
-  const dispatcher = createDispatcher([pins], enabled)
+  const driver = createDriver([pins], enabled)
   const calls = { count: 0 }
-  return dispatcher.dispatch(w.$, 'prompt.compose', {
+  return driver.dispatch(w.$, 'prompt.compose', {
     model: 'claude-sonnet-5', promptModel: 'claude-sonnet-5', surfaces: ['terminal'], tools: [], outputStyle: null, traits: [],
   } as Args<'prompt.compose'>, bottom('prompt.compose', { sections: ENGINE_SECTIONS }, calls))
 }
@@ -281,4 +280,17 @@ describe('pins subcommands', () => {
     const answer = await compose(w)
     expect(answer.sections.at(-1)?.text).toContain('- windows rule')
   })
+})
+
+// Through the plugin as the engine loads it: /ultra pin writes one file, the
+// project's .claude/pins.md, and nothing else.
+test('/ultra pin writes only the project pins file', async ($, on) => {
+  mock.store(on)
+  const writes: { path: string; text: string }[] = []
+  on('session.root', () => ({ value: '/work/project' }))
+  on('fs.exists', () => ({ value: false }))
+  on('fs.write', ($, e) => { writes.push({ path: e.path, text: e.text }); return { value: undefined } })
+  const answer = await $.command.run({ command: 'ultra', args: 'pin keep answers short', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  expect(answer.text).toBe('Pinned: keep answers short')
+  expect(writes).toEqual([{ path: '/work/project/.claude/pins.md', text: '- keep answers short\n' }])
 })

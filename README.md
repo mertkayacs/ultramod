@@ -1,6 +1,6 @@
 <h1 align="center">Ultra Mod</h1>
 
-<p align="center"><b>The all-in-one mod pack for Claude Code.</b> Ten mods in one install: your usage limits and context window above the prompt, a guard with undo for <code>rm -rf</code> and <code>git reset --hard</code>, <code>.env</code> files kept away from the model, and a receipt under every answer that shows what really ran.</p>
+<p align="center"><b>The best all-in-one mod pack for Claude Code.</b> Ten mods in one install: your usage limits and context window above the prompt, a guard with undo for <code>rm -rf</code> and <code>git reset --hard</code>, <code>.env</code> files kept away from the model, and a receipt under every answer that shows what really ran.</p>
 
 <p align="center">
   <a href="https://github.com/mertkayacs/ultramod/actions/workflows/ci.yml"><img src="https://github.com/mertkayacs/ultramod/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
@@ -111,7 +111,7 @@ Flip any single mod in the `/ultra` pane. A changed set shows as `essentials*`; 
 
 ## Trust
 
-Ultra Mod makes no network requests, sends no telemetry and has no dependencies. It starts only `git`, `rm -f` (or `cmd /c del` on Windows) for the temporary index a snapshot uses, `uname` and `which`, and your system notifier (`notify-send`, or the `osascript` and PowerShell scripts shipped in `plugin/scripts/`, with `wslpath` under WSL). The full list with every argument is in [plugin/README.md](plugin/README.md). Guards fail closed: if a check breaks, the command is refused. Everything else fails open: a broken HUD never blocks a tool call.
+Ultra Mod makes no network requests, sends no telemetry and has no dependencies. It starts only `git`, `rm -f` for the temporary index a snapshot uses (on Windows the PowerShell script `plugin/scripts/remove-index.ps1`), `uname` and `which`, and your system notifier (`notify-send`, or the `osascript` and PowerShell scripts shipped in `plugin/scripts/`, with `wslpath` under WSL). It has no permission hook and never answers allow for a tool call. The full list with every argument is in [plugin/README.md](plugin/README.md). Guards fail closed: if a check breaks, the command is refused. Everything else fails open: a broken HUD never blocks a tool call.
 
 Mods run inside Claude Code with your permissions, so read before you install. `claude plugin validate` lists every event a mod hooks and every call it makes, without running it. [docs/security.md](docs/security.md) has the same list per mod.
 

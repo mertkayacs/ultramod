@@ -13,8 +13,8 @@ npm run check
 
 ## What to know
 
-- Mods are TypeScript hooks in `plugin/hooks/mods/`
-- Each mod exports a `register` function
+- Mods are TypeScript modules in `plugin/hooks/mods/`; each exports an `UltraMod` object of plain steps
+- Every engine hook is registered once, in `plugin/hooks/register.tsx`, and calls the mods' steps
 - Shared code lives in `plugin/hooks/core/` and `plugin/hooks/lib/`
 - Tests use `claude plugin test` (Claude Code's test runner)
 - `npm run check` runs validate, test, and typecheck
@@ -24,7 +24,7 @@ npm run check
 - Strict TypeScript, `noUncheckedIndexedAccess`
 - No `import()`: import files with `import` declarations
 - No DOM, no Node in hooks
-- Fail closed for guards (`.catch` returns `{ deny }`), fail open for observers
+- Fail closed for checks (a failing check refuses the call), fail open for everything else
 - Every behaviour has a test covering main path, false positives, and failure path
 - Drawings work on both terminal and desktop surfaces
 

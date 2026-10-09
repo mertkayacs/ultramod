@@ -1,8 +1,8 @@
 import { expect, test, describe } from 'claude-code/testing'
 import type { Args, EventResult, Frozen } from 'claude-code'
 import type { UltraApi } from '../hooks/core/api'
-import { createDispatcher } from '../hooks/core/dispatcher'
-import type { ModEvent, ModNext } from '../hooks/core/mod'
+import { createDriver } from './drive'
+import type { Beneath, DriveEvent } from './drive'
 import { resolveSet } from '../hooks/core/sets'
 import { resetNotifier } from '../hooks/core/notifier'
 import { tidy } from '../hooks/mods/tidy'
@@ -51,19 +51,17 @@ function world(init: { set?: unknown } = {}): World {
   return w
 }
 
-function bottom<E extends ModEvent>(event: E, answer: EventResult<E>, calls: { count: number }): ModNext<E> {
-  const next = Object.assign(async (_e: Frozen<Args<E>> | Args<E>) => {
+function bottom<E extends DriveEvent>(_event: E, answer: EventResult<E>, calls: { count: number }): Beneath<E> {
+  return async () => {
     calls.count += 1
     return answer
-  }, { event, signal: undefined })
-  Object.defineProperty(next, 'called', { get: () => calls.count > 0 })
-  return next as unknown as ModNext<E>
+  }
 }
 
 function call(w: World, file_path: string, content = 'notes'): Promise<EventResult<'tool.call'>> {
-  const dispatcher = createDispatcher([tidy], enabled)
+  const driver = createDriver([tidy], enabled)
   const calls = { count: 0 }
-  return dispatcher.dispatch(w.$, 'tool.call', { tool: 'Write', file_path, content } as unknown as Args<'tool.call'>, bottom('tool.call', { result: 'wrote', text: 'wrote' }, calls))
+  return driver.dispatch(w.$, 'tool.call', { tool: 'Write', file_path, content } as unknown as Args<'tool.call'>, bottom('tool.call', { result: 'wrote', text: 'wrote' }, calls))
 }
 
 describe('tidy asks about stray documentation files', () => {
@@ -170,15 +168,15 @@ describe('tidy passes everything else through', () => {
 
   test('non Write tools are not hooked', async () => {
     const w = world({ set: resolveSet({ set: 'strict' }) })
-    const dispatcher = createDispatcher([tidy], enabled)
+    const driver = createDriver([tidy], enabled)
     const calls = { count: 0 }
-    const answer = await dispatcher.dispatch(w.$, 'tool.call', { tool: 'Edit', file_path: 'NOTES.md', old_string: 'a', new_string: 'b' } as unknown as Args<'tool.call'>, bottom('tool.call', { result: 'ran', text: 'ran' }, calls))
+    const answer = await driver.dispatch(w.$, 'tool.call', { tool: 'Edit', file_path: 'NOTES.md', old_string: 'a', new_string: 'b' } as unknown as Args<'tool.call'>, bottom('tool.call', { result: 'ran', text: 'ran' }, calls))
     expect(answer).toMatchObject({ result: 'ran' })
   })
 
   test('essentials keeps tidy off entirely', async () => {
     const w = world()
-    const off = createDispatcher([tidy], { enabled: async () => false })
+    const off = createDriver([tidy], { enabled: async () => false })
     const calls = { count: 0 }
     const answer = await off.dispatch(w.$, 'tool.call', { tool: 'Write', file_path: 'NOTES.md', content: 'x' } as unknown as Args<'tool.call'>, bottom('tool.call', { result: 'wrote', text: 'wrote' }, calls))
     expect(answer).toMatchObject({ result: 'wrote' })

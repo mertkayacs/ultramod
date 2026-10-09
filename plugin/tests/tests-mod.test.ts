@@ -1,8 +1,8 @@
-import { expect, test, describe } from 'claude-code/testing'
+import { describe, expect, mock, test } from 'claude-code/testing'
 import type { Args, EventResult, Frozen } from 'claude-code'
 import type { UltraApi } from '../hooks/core/api'
-import { createDispatcher } from '../hooks/core/dispatcher'
-import type { ModEvent, ModNext } from '../hooks/core/mod'
+import { createDriver } from './drive'
+import type { Beneath, DriveEvent } from './drive'
 import { resetNotifier } from '../hooks/core/notifier'
 import { resolveSet } from '../hooks/core/sets'
 import { tests } from '../hooks/mods/tests'
@@ -89,19 +89,17 @@ async function settle(): Promise<void> {
   await ticks(100)
 }
 
-function bottom<E extends ModEvent>(event: E, answer: EventResult<E>, calls: { count: number }): ModNext<E> {
-  const next = Object.assign(async (_e: Frozen<Args<E>> | Args<E>) => {
+function bottom<E extends DriveEvent>(_event: E, answer: EventResult<E>, calls: { count: number }): Beneath<E> {
+  return async () => {
     calls.count += 1
     return answer
-  }, { event, signal: undefined })
-  Object.defineProperty(next, 'called', { get: () => calls.count > 0 })
-  return next as unknown as ModNext<E>
+  }
 }
 
 function call(w: World, e: Args<'tool.call'>): Promise<EventResult<'tool.call'>> {
-  const dispatcher = createDispatcher([tests], enabled)
+  const driver = createDriver([tests], enabled)
   const calls = { count: 0 }
-  return dispatcher.dispatch(w.$, 'tool.call', e, bottom('tool.call', { result: 'ran', text: 'ran', isReadOnly: true }, calls))
+  return driver.dispatch(w.$, 'tool.call', e, bottom('tool.call', { result: 'ran', text: 'ran', isReadOnly: true }, calls))
 }
 
 const editTest = (oldText: string, newText: string) => ({ tool: 'Edit', file_path: 'src/app.test.ts', old_string: oldText, new_string: newText }) as unknown as Args<'tool.call'>
@@ -384,32 +382,17 @@ describe('tests deny mode notifies an away user (C34)', () => {
   })
 })
 
-// Directory rule: a permission hook passes the check on or answers a fixed
-// deny or ask. The C35 tests asserted an allow answer for a call approved in
-// this mod's dialog; that answer is gone, so the engine's own verdict stands.
-describe('tests never answers a permission check with allow', () => {
-  const approve = (w: World, id: string) => {
-    w.files.set('src/app.test.ts', 'test("a", () => { expect(1).toBe(1) })')
-    return call(w, { ...editTest('test("a"', 'test.skip("a"'), tool_use_id: id } as unknown as Args<'tool.call'>)
+// Directory rule: Ultra Mod registers no permission hook, so the engine's own
+// verdict reaches Claude Code unchanged. These run through the plugin as the
+// engine loads it.
+describe('tests never answers a permission check', () => {
+  for (const verdict of ['ask', 'allow', 'deny'] as const) {
+    test(`an engine ${verdict} passes through the plugin unchanged`, async ($, on) => {
+      mock.store(on)
+      on('session.root', () => ({ value: '/work' }))
+      on('tool.check', () => ({ decision: verdict }))
+      const check = { tool: 'Edit', input: { file_path: 'src/app.test.ts', old_string: 'test("a"', new_string: 'test.skip("a"' }, tool_use_id: 'toolu_1' } as unknown as Args<'tool.check'>
+      expect(await $.tool.check(check)).toEqual({ decision: verdict })
+    })
   }
-
-  function check(w: World, id: string | undefined, verdict: 'ask' | 'allow' | 'deny' = 'ask') {
-    const dispatcher = createDispatcher([tests], enabled)
-    const calls = { count: 0 }
-    const e = { tool: 'Edit', input: {}, tool_use_id: id } as unknown as Args<'tool.check'>
-    return dispatcher.dispatch(w.$, 'tool.check', e, bottom('tool.check', { decision: verdict } as EventResult<'tool.check'>, calls))
-  }
-
-  test('the engine ask after an approved dialog stays an ask', async () => {
-    const w = world()
-    await approve(w, 'toolu_1')
-    expect(await check(w, 'toolu_1')).toEqual({ decision: 'ask' })
-  })
-
-  test('deny and allow verdicts from below pass through unchanged', async () => {
-    const w = world()
-    await approve(w, 'toolu_1')
-    expect(await check(w, 'toolu_1', 'deny')).toEqual({ decision: 'deny' })
-    expect(await check(w, 'toolu_1', 'allow')).toEqual({ decision: 'allow' })
-  })
 })

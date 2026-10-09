@@ -1,8 +1,7 @@
 import { expect, test, describe } from 'claude-code/testing'
 import type { Args, EventResult, Frozen } from 'claude-code'
 import type { UltraApi } from '../hooks/core/api'
-import { createDispatcher } from '../hooks/core/dispatcher'
-import type { ModEvent, ModNext } from '../hooks/core/mod'
+import { createDriver } from './drive'
 import { resolveSet } from '../hooks/core/sets'
 import { loops, resetLoops } from '../hooks/mods/loops'
 
@@ -49,16 +48,10 @@ interface Drive {
 
 function drive(w: World): Drive {
   resetLoops()
-  const dispatcher = createDispatcher([loops], enabled)
+  const driver = createDriver([loops], enabled)
   return {
     run: (e, result) => {
-      const calls = { count: 0 }
-      const next = Object.assign(async () => {
-        calls.count += 1
-        return result
-      }, { event: 'tool.call' as const, signal: undefined })
-      Object.defineProperty(next, 'called', { get: () => calls.count > 0 })
-      return dispatcher.dispatch(w.$, 'tool.call', e, next as unknown as ModNext<'tool.call'>)
+      return driver.dispatch(w.$, 'tool.call', e, async () => result)
     },
   }
 }

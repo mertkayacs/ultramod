@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.5 (2026-10-09)
+
+Plugin directory release: the hooks module is rebuilt so the directory's analyzer can read every hook. Behaviour is the same unless noted.
+
+### Changes
+- hooks: every hook is a named function at the top of `hooks/register.tsx`, registered on its own line as `on("event", hook)`. The engine's `$` goes only to `createApi`, and `next` never leaves the hook that received it. Mods are now plain steps (`check`, `watch`, `turnComplete`, `append`, `compose` and the lifecycle steps) that return values, run by `core/runtime.ts`; the middleware dispatcher is gone
+- tool.call: two registrations. The check hook, on the eight tools guard, secrets, tests and tidy read, answers only `next(e)` or `{ deny }` and refuses when it fails; the watch hook on every tool counts the call and adds the loops line
+- no permission hook and no prompt hook: the unused `tool.check` and `prompt.submit` registrations are removed
+- guard: on Windows the snapshot's temporary index is removed by a shipped script, `scripts/remove-index.ps1`, which removes only Ultra Mod's two index files, instead of an inline `cmd /c del`
+- facade: no accessors and no `.then` chains; the one file write is `fs.writePins`, which writes only `<project root>/.claude/pins.md`; unused forwards (`$.ui.status`, `$.ui.close`, `$.ui.invalidate`, `$.session.id`, `$.store.delete`, `$.store.keys`) and the unused `TERM_PROGRAM` read are gone
+- notify and compact run their turn-end work before the turn's result is passed on instead of after; the receipt still goes under the answer
+- `/ultra doctor` reports the real version (it said 1.0.0)
+- plugin README: what each hook decides and when, what the hooks change, what goes to the notifier, the exact commands it runs, the files it writes and the environment variables it reads, plus the install line
+- listing: new description and keywords
+
 ## 1.0.4 (2026-10-09)
 
 ### Changes

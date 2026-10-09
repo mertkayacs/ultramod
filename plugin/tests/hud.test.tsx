@@ -1,7 +1,8 @@
 import { expect, mock, test } from 'claude-code/testing'
-import type { EngineInterface, On, RenderElement, RenderInput, RenderNode, RenderPropsOf, SessionUsage, ToolCallArgs } from 'claude-code'
-import { createHud } from '../hooks/mods/hud'
-import type { ModNext, UltraMod } from '../hooks/core/mod'
+import type { On, RenderElement, RenderInput, RenderNode, RenderPropsOf, SessionUsage, ToolCallArgs } from 'claude-code'
+import { bandRows } from '../hooks/mods/hud'
+import type { UltraApi } from '../hooks/core/api'
+import type { UltraMod } from '../hooks/core/mod'
 import { createSets, resolveSet } from '../hooks/core/sets'
 import type { UltraTurn } from '../types/index'
 
@@ -104,7 +105,7 @@ test('HUD yields to surveys and unsupported surfaces', async ($, on) => {
   }
 })
 
-// The dispatcher skips a disabled mod's handler, so a HUD that is off leaves
+// The runtime skips a disabled mod's steps, so a HUD that is off leaves
 // the band to the other plugins, however it was switched off.
 test('a disabled HUD draws no row, whether the set or the person turned it off', async ($, on) => {
   world(on)
@@ -308,19 +309,19 @@ test('band contributors receive available width and failures preserve later cont
     { id: 'notify', band: () => ({ node: { type: 'Text', props: {}, children: ['too wide'] }, columns: 200 }) },
     { id: 'tidy', band: () => { disabledCalled = true; return null } },
   ]
-  const hud = createHud(createSets(), mods)
-  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
-    const handler = hud.hooks?.['ui.render']?.[0]
-    if (!handler) throw new Error('HUD render handler is missing')
+  const sets = createSets()
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e) => {
     const bottom: RenderElement = { type: 'Text', props: {}, children: ['contributor downstream'] }
-    const next = Object.assign(() => Promise.resolve(bottom), { called: false, event: 'ui.render' as const, signal: AbortSignal.abort() }) as ModNext<'ui.render'>
     const api = {
       state: { get: async (ref: { key: string }) => ({ value: ref.key === 'set' ? resolveSet(undefined) : undefined, version: 0 }) },
       session: { usage: async () => readings, model: async () => 'claude-sonnet-4-6' },
       clock: { now: async () => 0 },
       ui: { resolve: (input: RenderInput) => $.ui.resolve(input) },
-    } as unknown as EngineInterface
-    return handler.run(api, e, next)
+    } as unknown as UltraApi
+    const rows = await bandRows(api, e, sets, mods)
+    if (!rows) throw new Error('the band drew no rows')
+    const { Box } = $.ui.resolve(e)
+    return <Box flexDirection="column">{rows}{bottom}</Box>
   })
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'ultramod', surface, component: 'AbovePrompt', props: BAND })

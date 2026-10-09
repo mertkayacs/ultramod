@@ -18,3 +18,10 @@ test('notify.ps1 takes the body as base64 data', () => {
   assert.match(script, /FromBase64String\(\$BodyBase64\)/);
   assert.match(script, /ShowBalloonTip\(5000, 'Claude Code', \$body, 'Info'\)/);
 });
+
+test('remove-index.ps1 removes only the two Ultra Mod index files', () => {
+  const script = read('remove-index.ps1');
+  assert.match(script, /param\(\s*\[Parameter\(Mandatory = \$true\)\]\[string\]\$Path\s*\)/);
+  assert.match(script, /if \(\$name -ne 'ultramod-index' -and \$name -ne 'ultramod-restore-index'\) \{ exit 2 \}/);
+  assert.match(script, /Remove-Item -LiteralPath \$Path -Force/);
+});
