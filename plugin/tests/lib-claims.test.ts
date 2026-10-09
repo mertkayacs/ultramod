@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'claude-code/testing'
-import { commandKind, claimsIn } from '../hooks/lib/claims'
+import { commandKind, claimsIn, exitProvesAll } from '../hooks/lib/claims'
 
 describe('commandKind', () => {
   const CASES: [string, string | null][] = [
@@ -27,6 +27,27 @@ describe('commandKind', () => {
   ['pnpm exec vitest run', 'test'],
   ['pnpm exec -- vitest run', 'test'],
   ['pnpm dlx vitest run', 'test'],
+  // a version pin on the tool is not part of its name
+  ['npx vitest@3 run', 'test'],
+  ['npx --yes jest@29', 'test'],
+  ['bunx vitest@latest', 'test'],
+  ['pnpm dlx vitest@3.2.4 run', 'test'],
+  ['npx eslint@9 .', 'lint'],
+  ['npx tsc@5.9.3 --noEmit', 'typecheck'],
+  ['npm exec vitest@3', 'test'],
+  // pnpm and bun run a bin by name, as yarn does
+  ['pnpm vitest run', 'test'],
+  ['bun vitest run', 'test'],
+  ['yarn vitest run', 'test'],
+  ['pnpm jest', 'test'],
+  ['pnpm tsc --noEmit', 'typecheck'],
+  ['bun eslint .', 'lint'],
+  // npm run has an alias
+  ['npm run-script test', 'test'],
+  ['npm run-script build', 'build'],
+  ['npm run-script lint', 'lint'],
+  ['npm run-script typecheck', 'typecheck'],
+  ['pnpm run-script test:unit', 'test'],
     // typecheck
     ['tsc --noEmit', 'typecheck'],
     ['tsc -p .', 'typecheck'],
@@ -57,6 +78,15 @@ describe('commandKind', () => {
     ['cargo fmt', null],
     ['python script.py', null],
     ['node server.js', null],
+    ['npx create-react-app@latest app', null],
+    ['npx prettier@3 --write .', null],
+    ['npm run-script dev', null],
+    ['pnpm install', null],
+    ['pnpm add -D vitest', null],
+    ['pnpm dev', null],
+    ['bun install', null],
+    ['bun run dev', null],
+    ['pnpm vitest --help', null],
     // strongest kind wins
     ['npm run build && npm test', 'test'],
     ['tsc --noEmit && npm run build', 'typecheck'],
@@ -104,6 +134,9 @@ describe('claimsIn', () => {
     ['all checks pass', 'tests'],
     ['ci passes', 'tests'],
     ['pipeline passed', 'tests'],
+    ['a quick check shows all tests pass', 'tests'],
+    ['I ran the check and all tests pass', 'tests'],
+    ['the final check: all tests pass', 'tests'],
   ]
 
   const NEGATIVE: string[] = [
@@ -129,6 +162,11 @@ describe('claimsIn', () => {
     'the tests shouldn\'t pass',
     'the tests mustn\'t pass',
     'the tests needn\'t pass',
+    'Check that all tests pass',
+    'check that the build passes',
+    'Please check that the type check passes',
+    'double-check that lint is clean',
+    'You may want to check that all tests pass before merging',
   ]
 
   test('positive phrases count', () => {
@@ -159,4 +197,52 @@ describe('claimsIn', () => {
     const c = claimsIn('I refactored the parser and added two files.')
     expect(c.tests || c.build || c.typecheck || c.lint).toBe(false)
   })
+})
+
+describe('exitProvesAll', () => {
+  const PROVES = [
+    'npm test',
+    'cd app && npm test',
+    'npm run build && npm test',
+    'npm test 2>&1',
+    'npm test > out.log 2>&1',
+    'npm test &> out.log',
+    'npm test >&2',
+    'FOO=1 npm test',
+    '(cd app && npm test)',
+    '[ -f package.json ] && npm test',
+    'echo "a;b|c" && npm test',
+    "echo 'a || b' && npm test",
+    'npm test -- --grep "a || b"',
+    'npm test -- -t foo\\|bar',
+    'cd app &&   npm test\n',
+    'npm run build \\\n  && npm test',
+  ]
+  const NOT = [
+    'npm test || true',
+    'npm test; echo done',
+    'npm test | tail -20',
+    'npm test 2>&1 | tail -20',
+    'cd app && npm test | tee test.log',
+    'npm test & wait',
+    'npm test\necho done',
+    'npm test && echo ok || echo bad',
+    'npm test || exit 1',
+    'echo $(npm test)',
+    'echo `npm test`',
+    'cat <<EOF\nnpm test\nEOF',
+    "npm test 'unterminated",
+    'npm test "unterminated',
+    'npm test --reporter=a|b',
+  ]
+  for (const cmd of PROVES) {
+    test(`a zero exit proves ${JSON.stringify(cmd)}`, () => {
+      expect(exitProvesAll(cmd)).toBe(true)
+    })
+  }
+  for (const cmd of NOT) {
+    test(`a zero exit does not prove ${JSON.stringify(cmd)}`, () => {
+      expect(exitProvesAll(cmd)).toBe(false)
+    })
+  }
 })
