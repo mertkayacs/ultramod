@@ -4,6 +4,7 @@ import type { UltraApi } from '../hooks/core/api'
 import { createDispatcher } from '../hooks/core/dispatcher'
 import type { ModEvent, ModNext } from '../hooks/core/mod'
 import { resolveSet } from '../hooks/core/sets'
+import { needsYou } from '../hooks/core/notifier'
 import { notify, resetNotify } from '../hooks/mods/notify'
 
 const enabled = { enabled: async () => true }
@@ -13,10 +14,13 @@ interface World {
   argvs: string[][]
   failures: Set<string>
   toasts: string[]
-  played: { asset?: string }[]
+  played: { asset?: string; base64?: string; mime?: string }[]
   now: { ms: number }
   env: Record<string, string | undefined>
   blocked: boolean
+  exits: Record<string, number>
+  // When set, clock.after queues its callback like the engine does until the dispatch has resolved.
+  deferred: (() => void)[] | null
 }
 
 function world(init: { env?: Record<string, string | undefined>; set?: unknown } = {}): World {
@@ -29,6 +33,8 @@ function world(init: { env?: Record<string, string | undefined>; set?: unknown }
     now: { ms: 1_000_000 },
     env: { OS: 'Linux', ...init.env },
     blocked: false,
+    exits: {},
+    deferred: null,
     $: null as unknown as UltraApi,
   }
   const state = new Map<string, unknown>([['set', init.set ?? null]])
@@ -62,6 +68,7 @@ function world(init: { env?: Record<string, string | undefined>; set?: unknown }
           return { exitCode: found ? 0 : 1, stdout: found ? `/usr/bin/${target}` : '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
         }
         if (name === 'notify-send' && w.blocked) return new Promise<never>(() => undefined)
+        if (w.exits[name] !== undefined && name !== 'which') return { exitCode: w.exits[name], stdout: '', stderr: 'boom', isStdoutTruncated: false, isStderrTruncated: false }
         return { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
       },
     },
@@ -72,9 +79,13 @@ function world(init: { env?: Record<string, string | undefined>; set?: unknown }
       every: () => ({ cancel: () => undefined }),
       // The engine would run the callback off the dispatch; run it now so a
       // scheduled notification still lands before the assertions below.
-      after: (_ms: number, fn: () => void) => { fn(); return { cancel: () => undefined } },
+      after: (_ms: number, fn: () => void) => {
+        if (w.deferred) w.deferred.push(fn)
+        else fn()
+        return { cancel: () => undefined }
+      },
     },
-    audio: { play: async (clip: { asset?: string }) => { w.played.push(clip) } },
+    audio: { play: async (clip: { asset?: string; base64?: string; mime?: string }) => { w.played.push(clip) } },
     command: { register: async () => ({ value: { command: 'ultramod' } }) },
     env: { get: async (name: string) => w.env[name] },
   } as unknown as UltraApi
@@ -112,7 +123,7 @@ async function completeTurn(w: World, durationMs: number, extra: Partial<Args<'t
   return result
 }
 
-async function notification(w: World, message: string, notificationType = 'permission'): Promise<EventResult<'classic.Notification'>> {
+async function notification(w: World, message: string, notificationType = 'permission_prompt'): Promise<EventResult<'classic.Notification'>> {
   const dispatcher = createDispatcher([notify], enabled)
   const calls = { count: 0 }
   const result = await dispatcher.dispatch(w.$, 'classic.Notification', {
@@ -120,6 +131,12 @@ async function notification(w: World, message: string, notificationType = 'permi
   } as Args<'classic.Notification'>, bottom('classic.Notification', {} as EventResult<'classic.Notification'>, calls))
   await settle()
   return result
+}
+
+// The body travels as base64 so no character of it is ever PowerShell source.
+function psBody(script: string | undefined): string {
+  const match = /FromBase64String\('([A-Za-z0-9+/=]*)'\)/.exec(script ?? '')
+  return new TextDecoder().decode(Uint8Array.from(atob(match?.[1] ?? ''), ch => ch.charCodeAt(0)))
 }
 
 const NOTIFIERS = ['notify-send', 'osascript', 'powershell.exe']
@@ -139,12 +156,24 @@ describe('notify sends platform notifications with exact argv', () => {
     expect(notifierArgv(w)).toEqual([['osascript', '-e', 'display notification "my \\"proj\\" finished in 1m05s" with title "Claude Code"']])
   })
 
-  test('windows uses powershell with doubled quotes', async () => {
+  test('windows uses powershell and carries the body as base64 data', async () => {
     const w = world({ env: { OS: 'Windows_NT' } })
     await completeTurn(w, 134_000)
-    expect(notifierArgv(w)).toEqual([['powershell.exe', '-NoProfile', '-Command',
-      "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $n = New-Object System.Windows.Forms.NotifyIcon; $n.Icon = [System.Drawing.SystemIcons]::Information; $n.Visible = $true; $n.ShowBalloonTip(5000, 'Claude Code', 'project finished in 2m14s', 'Info'); Start-Sleep -Seconds 2; $n.Dispose()",
-    ]])
+    const argv = notifierArgv(w)[0] ?? []
+    expect(argv.slice(0, 3)).toEqual(['powershell.exe', '-NoProfile', '-Command'])
+    expect(psBody(argv[3])).toBe('project finished in 2m14s')
+    expect(argv[3]).toContain("$n.ShowBalloonTip(5000, 'Claude Code', $body, 'Info')")
+  })
+
+  test('a folder name with curly quotes cannot break out of the powershell script', async () => {
+    const w = world({ env: { OS: 'Windows_NT' } })
+    const folder = 'x\u2019); Start-Process calc; #'
+    ;(w.$ as unknown as { session: { root: () => Promise<string> } }).session.root = async () => `/work/${folder}`
+    await completeTurn(w, 134_000)
+    const script = notifierArgv(w)[0]?.[3] ?? ''
+    expect(script).not.toContain('Start-Process')
+    expect(script).not.toContain('\u2019')
+    expect(psBody(script)).toBe(`${folder} finished in 2m14s`)
   })
 
   test('the platform comes from uname, not from the OS variable', async () => {
@@ -163,7 +192,7 @@ describe('notify sends platform notifications with exact argv', () => {
     const w = world({ env: { OS: 'Windows_NT' } })
     ;(w.$ as unknown as { session: { root: () => Promise<string> } }).session.root = async () => 'C:\\work\\project'
     await completeTurn(w, 134_000)
-    expect(notifierArgv(w)[0]?.join(' ')).toContain('project finished in 2m14s')
+    expect(psBody(notifierArgv(w)[0]?.[3])).toBe('project finished in 2m14s')
   })
 
   test('classic.Notification says the project needs you', async () => {
@@ -272,7 +301,13 @@ describe('notify chime', () => {
   test('essentials plays the bundled chime', async () => {
     const w = world()
     await completeTurn(w, 134_000)
-    expect(w.played).toEqual([{ asset: 'assets/chime.wav' }])
+    expect(w.played).toHaveLength(1)
+    expect(w.played[0]).toMatchObject({ mime: 'audio/wav' })
+    expect(w.played[0]).not.toHaveProperty('asset')
+    const bytes = atob(w.played[0]?.base64 ?? '')
+    expect(bytes.slice(0, 4)).toBe('RIFF')
+    expect(bytes.slice(8, 16)).toBe('WAVEfmt ')
+    expect(bytes.length).toBeGreaterThan(1000)
   })
 
   test('strict stays silent', async () => {
@@ -292,5 +327,86 @@ describe('notify chime', () => {
     ;(w.$ as unknown as { audio: { play: () => Promise<void> } }).audio.play = async () => { throw new Error('no audio device') }
     await expect(completeTurn(w, 134_000)).resolves.toMatchObject({ text: '' })
     expect(notifierArgv(w)).toHaveLength(1)
+  })
+})
+
+describe('notify only alerts for notifications that wait for the user', () => {
+  for (const type of ['permission_prompt', 'elicitation_dialog']) {
+    test(`${type} notifies`, async () => {
+      const w = world()
+      await notification(w, 'Claude needs you', type)
+      expect(notifierArgv(w)).toHaveLength(1)
+    })
+  }
+
+  for (const type of ['auth_success', 'elicitation_complete', 'elicitation_response', 'something_new']) {
+    test(`${type} stays silent`, async () => {
+      const w = world()
+      await notification(w, 'FYI', type)
+      expect(notifierArgv(w)).toEqual([])
+      expect(w.toasts).toEqual([])
+    })
+  }
+
+  test('the notification send is deferred off the dispatch like the other paths', async () => {
+    const w = world()
+    w.deferred = []
+    await notification(w, 'Claude needs permission', 'permission_prompt')
+    expect(notifierArgv(w)).toEqual([])
+    expect(w.deferred).toHaveLength(1)
+    w.deferred[0]?.()
+    await settle()
+    expect(notifierArgv(w)).toHaveLength(1)
+  })
+})
+
+describe('notifier delivery details', () => {
+  test('a notifier that exits nonzero falls back to a toast', async () => {
+    const w = world()
+    w.exits['notify-send'] = 1
+    await completeTurn(w, 134_000)
+    expect(w.toasts).toEqual(['project finished in 2m14s'])
+  })
+
+  test('a newline in the body cannot break the osascript string', async () => {
+    const w = world({ env: { OS: 'Linux', UNAME: 'Darwin' } })
+    await notification(w, 'line one\nline two\r\nline three')
+    const script = notifierArgv(w)[0]?.[2] ?? ''
+    expect(script).not.toMatch(/[\r\n]/)
+    expect(script).toContain('line one line two line three')
+  })
+})
+
+describe('the away notification fires while the dialog is still open', () => {
+  test('needsYou delivers without waiting for the dispatch to resolve', async () => {
+    const w = world()
+    // The engine runs clock.after callbacks only once the current dispatch has resolved.
+    w.deferred = []
+    needsYou(w.$, 'guard: run `rm -rf build`?')
+    await settle()
+    expect(notifierArgv(w)).toEqual([['notify-send', 'Claude Code', 'project needs you: guard: run `rm -rf build`?']])
+    expect(w.deferred).toEqual([])
+  })
+
+  test('a hook that awaits an unanswered dialog has already notified', async () => {
+    const w = world()
+    w.deferred = []
+    let answer: (value: string) => void = () => undefined
+    ;(w.$ as unknown as { ui: { ask: () => Promise<string> } }).ui.ask = () => new Promise<string>(resolve => { answer = resolve })
+    const dialog = (async () => {
+      needsYou(w.$, 'tests: confirm')
+      return w.$.ui.ask('Allow?')
+    })()
+    await settle()
+    expect(notifierArgv(w)).toHaveLength(1)
+    answer('Allow')
+    await dialog
+  })
+
+  test('needsYou stays quiet when the notify mod is off', async () => {
+    const w = world({ set: resolveSet({ set: 'quiet' }) })
+    needsYou(w.$, 'guard: run?')
+    await settle()
+    expect(notifierArgv(w)).toEqual([])
   })
 })

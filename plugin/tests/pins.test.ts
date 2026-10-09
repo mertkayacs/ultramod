@@ -14,6 +14,9 @@ interface World {
   statCalls: string[]
   readCalls: string[]
   writes: { path: string; text: string }[]
+  // Files that exist but cannot be read, such as one over the 4 MiB limit.
+  unreadable: Set<string>
+  stateReads: number
   env: Record<string, string | undefined>
 }
 
@@ -25,13 +28,15 @@ function world(init: { env?: Record<string, string | undefined> } = {}): World {
     statCalls: [],
     readCalls: [],
     writes: [],
+    unreadable: new Set(),
+    stateReads: 0,
     env: { HOME: '/home/dev', ...init.env },
     $: null as unknown as UltraApi,
   }
   const state = new Map<string, unknown>([['set', null]])
   w.$ = {
     state: {
-      get: async (ref: { key: string }) => ({ value: state.get(ref.key), version: 1 }),
+      get: async (ref: { key: string }) => { w.stateReads += 1; return { value: state.get(ref.key), version: 1 } },
       set: async (ref: { key: string }, value: unknown) => { state.set(ref.key, value); return { isSet: true, version: 2 } },
     },
     ui: {
@@ -49,6 +54,7 @@ function world(init: { env?: Record<string, string | undefined> } = {}): World {
     fs: {
       read: async (path: string) => {
         w.readCalls.push(path)
+        if (w.unreadable.has(path)) throw new Error('file too large')
         if (!w.files.has(path)) throw new Error('missing file')
         return w.files.get(path) ?? ''
       },
@@ -59,7 +65,7 @@ function world(init: { env?: Record<string, string | undefined> } = {}): World {
         if (stat === undefined) throw new Error('missing file')
         return { kind: 'file', size: stat.mtimeMs, mtimeMs: stat.mtimeMs, isLink: false }
       },
-      exists: async (path: string) => w.files.has(path),
+      exists: async (path: string) => w.files.has(path) || w.unreadable.has(path),
     },
     store: { get: async () => undefined, set: async () => undefined, delete: async () => undefined, keys: async () => [] },
     clock: { now: async () => 0, every: () => ({ cancel: () => undefined }), after: () => ({ cancel: () => undefined }) },
@@ -123,6 +129,22 @@ describe('pins appends a session section', () => {
     const answer = await compose(w)
     const section = answer.sections.at(-1)
     expect(section?.text).toBe('Pinned rules from the user. Follow them in every reply:\n- star bullet\n- plus bullet\n- plain rule line')
+  })
+
+  test('multiline comments are dropped, closing marker included', async () => {
+    const w = world()
+    w.files.set(PROJECT, '- keep one\n<!--\n- hidden rule\nsecret note\n-->\n- keep two\n<!-- one line --> inline rule\n- tail <!-- aside --> text\n<!-- unterminated\n- lost rule\n')
+    w.stats.set(PROJECT, { mtimeMs: 1 })
+    const answer = await compose(w)
+    expect(answer.sections.at(-1)?.text).toBe('Pinned rules from the user. Follow them in every reply:\n- keep one\n- keep two\n- inline rule\n- tail  text')
+  })
+
+  test('the hook does not read the set state it never uses', async () => {
+    const w = world()
+    w.files.set(PROJECT, '- rule\n')
+    w.stats.set(PROJECT, { mtimeMs: 1 })
+    await compose(w)
+    expect(w.stateReads).toBe(0)
   })
 
   test('no files means no section', async () => {
@@ -190,6 +212,14 @@ describe('pins subcommands', () => {
     const answer = await pins.commands?.pin?.(w.$, 'new rule')
     expect(answer).toEqual({ text: 'Pinned: new rule' })
     expect(w.writes).toEqual([{ path: PROJECT, text: '- old rule\n- new rule\n' }])
+  })
+
+  test('pin leaves an unreadable pins file alone', async () => {
+    const w = world()
+    w.unreadable.add(PROJECT)
+    const answer = await pins.commands?.pin?.(w.$, 'new rule')
+    expect(w.writes).toEqual([])
+    expect(answer?.text).toContain('nothing was pinned')
   })
 
   test('pin creates the file when absent', async () => {

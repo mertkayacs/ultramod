@@ -4,6 +4,7 @@ import type { UltraApi } from '../hooks/core/api'
 import { createDispatcher } from '../hooks/core/dispatcher'
 import type { ModEvent, ModNext } from '../hooks/core/mod'
 import { resolveSet } from '../hooks/core/sets'
+import { resetNotifier } from '../hooks/core/notifier'
 import { tidy } from '../hooks/mods/tidy'
 
 const enabled = { enabled: async () => true }
@@ -13,10 +14,12 @@ interface World {
   asked: { question: string; header?: string }[]
   askAnswer: () => string
   exists: (path: string) => boolean
+  argvs: string[][]
 }
 
 function world(init: { set?: unknown } = {}): World {
-  const w: World = { asked: [], askAnswer: () => 'Allow', exists: () => false, $: null as unknown as UltraApi }
+  resetNotifier()
+  const w: World = { asked: [], askAnswer: () => 'Allow', exists: () => false, argvs: [], $: null as unknown as UltraApi }
   const state = new Map<string, unknown>([['set', init.set ?? null]])
   w.$ = {
     state: {
@@ -37,7 +40,7 @@ function world(init: { set?: unknown } = {}): World {
       resolve: () => { throw new Error('not needed') },
     },
     session: { root: async () => '/work/project', cwd: async () => '/work/project', id: async () => 's1', usage: async () => ({ startedAt: 0, context: { tokens: 0, window: 200000, percent: 1 }, rateLimits: [], cost: { usd: 0 } }), model: async () => 'claude-haiku-4.5', version: async () => ({ version: '2.1.292', base: '2.1.292', builtAt: '' }), compact: async () => ({}) },
-    process: { run: async () => ({ exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }) },
+    process: { run: async (argv: readonly string[]) => { w.argvs.push([...argv]); return { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } } },
     fs: { read: async () => '', write: async () => undefined, stat: async () => ({ kind: 'file', size: 1, mtimeMs: 1, isLink: false }), exists: async (path: string) => w.exists(path) },
     store: { get: async () => undefined, set: async () => undefined, delete: async () => undefined, keys: async () => [] },
     clock: { now: async () => 0, every: () => ({ cancel: () => undefined }), after: () => ({ cancel: () => undefined }) },
@@ -94,6 +97,50 @@ describe('tidy asks about stray documentation files', () => {
     const w = world({ set: resolveSet({ set: 'strict' }) })
     expect(await call(w, '/work/project/notes/TODO.md')).toMatchObject({ result: 'wrote' })
     expect(w.asked[0]?.question).toContain('notes/TODO.md')
+  })
+})
+
+describe('tidy path traversal', () => {
+  test('docs/../notes.md is a new stray file, not a docs file', async () => {
+    const w = world({ set: resolveSet({ set: 'strict' }) })
+    await call(w, 'docs/../notes.md')
+    expect(w.asked).toHaveLength(1)
+    expect(w.asked[0]?.question).toContain('docs/../notes.md')
+  })
+
+  test('an absolute path with dot segments is checked after they resolve', async () => {
+    const w = world({ set: resolveSet({ set: 'strict' }) })
+    await call(w, '/work/project/docs/../notes.md')
+    expect(w.asked).toHaveLength(1)
+  })
+
+  test('deny mode refuses docs/../notes.md without asking', async () => {
+    const w = world({ set: resolveSet({ set: 'marathon' }) })
+    expect(await call(w, 'docs/../notes.md')).toMatchObject({ deny: expect.stringContaining('new documentation file') })
+    expect(w.asked).toHaveLength(0)
+  })
+
+  test('a folder that only starts like an allowed name asks', async () => {
+    const w = world({ set: resolveSet({ set: 'strict' }) })
+    await call(w, 'licenses/third-party.md')
+    expect(w.asked).toHaveLength(1)
+  })
+})
+
+describe('tidy tells an away user about its question', () => {
+  test('the notification goes out while the question is still open', async () => {
+    const w = world({ set: resolveSet({ set: 'strict' }) })
+    ;(w.$ as unknown as { ui: { ask: () => Promise<string> } }).ui.ask = () => new Promise<string>(() => undefined)
+    void call(w, 'NOTES.md')
+    for (let i = 0; i < 100; i++) await Promise.resolve()
+    expect(w.argvs.filter(argv => argv[0] === 'notify-send')).toEqual([['notify-send', 'Claude Code', 'project needs you: tidy: create NOTES.md?']])
+  })
+
+  test('an allowed doc file notifies nobody', async () => {
+    const w = world({ set: resolveSet({ set: 'strict' }) })
+    await call(w, 'README.md')
+    for (let i = 0; i < 100; i++) await Promise.resolve()
+    expect(w.argvs.filter(argv => argv[0] === 'notify-send')).toEqual([])
   })
 })
 

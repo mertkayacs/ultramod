@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 import type { On, RenderPropsOf, ToolCallArgs } from 'claude-code'
 import type { UltraSet } from '../types/index'
 import { createSets, projectKey, resolveSet, setLabel, sets } from '../hooks/core/sets'
@@ -7,9 +8,9 @@ import type { UltraMod } from '../hooks/core/mod'
 
 const command = (args: string) => ({ command: 'ultra', args, origin: { kind: 'composer' } as const, presentation: { isFullscreen: false, columns: 100 } })
 const PANE: RenderPropsOf['Pane'] = { title: 'Ultra Mod', isFocused: true, bodyColumns: 100, placement: 'inline', scroll: { offset: 0, bodyRows: 20 }, view: {} }
-function world(on: On, entries: Record<string, unknown> = {}) {
+function world(on: On, entries: Record<string, unknown> = {}, env: Record<string, string> = {}) {
   mock.clock(on)
-  mock.env(on, {})
+  mock.env(on, env)
   const saved = new Map(Object.entries(entries))
   const states: (UltraSet | null)[] = []
   const registrations: unknown[] = []
@@ -171,7 +172,37 @@ test('/ultra doctor reports actual version and executable availability without i
   expect(result.text).toMatch(/Claude Code 2\.1\.292/)
   expect(result.text).toMatch(/Notifier: notify-send/)
   expect(result.text).toMatch(/Git: available/)
-  expect(commands).toEqual([['git', '--version'], ['which', 'notify-send']])
+  expect(commands).toEqual([['git', '--version'], ['uname', '-s'], ['which', 'notify-send']])
+})
+
+// Doctor names the notifier the plugin would really use: the same detector as a send.
+async function doctorNotifier($: Engine, on: On, env: Record<string, string>, kernel: string, installed: string[]) {
+  world(on, {}, env)
+  on('session.version', () => ({ value: { version: '2.1.292', base: '2.1.292', builtAt: 'test' } }))
+  on('process.run', ($, e) => {
+    const out = (exitCode: number, stdout = '') => ({ value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
+    if (e.argv[0] === 'uname') return out(0, `${kernel}\n`)
+    if (e.argv[0] === 'which') return out(installed.includes(String(e.argv[1])) ? 0 : 1)
+    return out(0)
+  })
+  const result = await $.command.run(command('doctor'))
+  return /^Notifier: (.*)$/m.exec(result.text ?? '')?.[1]
+}
+
+test('/ultra doctor names osascript on macOS even when notify-send is installed', async ($, on) => {
+  expect(await doctorNotifier($, on, {}, 'Darwin', ['notify-send', 'osascript'])).toBe('osascript')
+})
+
+test('/ultra doctor names powershell under WSL', async ($, on) => {
+  expect(await doctorNotifier($, on, { WSL_DISTRO_NAME: 'Ubuntu' }, 'Linux', ['notify-send'])).toBe('powershell')
+})
+
+test('/ultra doctor names powershell on Windows', async ($, on) => {
+  expect(await doctorNotifier($, on, { OS: 'Windows_NT' }, '', [])).toBe('powershell')
+})
+
+test('/ultra doctor falls back to toast when nothing is installed', async ($, on) => {
+  expect(await doctorNotifier($, on, {}, 'Linux', [])).toBe('toast')
 })
 
 test('/ultra doctor prints each mod live state and mode, never the stale placeholder line', async ($, on) => {
