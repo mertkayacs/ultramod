@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.0.1 (2026-10-09)
+
+Hardening release. Reviewers on two listing PRs filed 74 findings against 1.0.0; each one is fixed with a test or answered with evidence.
+
+### Security
+- guard: `..` in rm paths is resolved, so `rm -rf node_modules/../../*` is no longer treated as a safe root
+- guard: wrapped commands are checked (`sudo sh -c`, `bash -lc`, `env`, `timeout`, `nice`, `eval`, quoted shells like `| "sh"`)
+- guard: SQL sent through `docker exec`, `kubectl exec`, `ssh` and similar wrappers is classified
+- guard: a command after a heredoc on the same line is no longer hidden inside it
+- guard: `kubectl` global flags that take values (`--server`, `--token`, `-s`) no longer hide the verb
+- guard: commands quoted back to the model, notifications, logs and snapshot messages are redacted
+- secrets: `node --env-file=.env -e ...` and similar runner reads of a protected env file are refused
+- secrets: `printenv --null` and `env -0` count as environment dumps in strict mode
+- secrets: a later hook's deny text or context is redacted before it reaches the model
+- secrets: redaction runs in linear time (1 MB of adversarial text in under 50 ms)
+- tidy: `docs/../notes.md` and wildcard look-alike folders no longer slip past the allowlist
+- notify: notification text travels as data on every platform, so a folder name cannot inject script
+
+### Fixes
+- undo: restoring a snapshot keeps tracked files created after it (real git test)
+- undo: snapshot refs taken in the same second no longer overwrite each other
+- receipts: a test piped into another command or followed by `;` or `||` does not count as a pass
+- receipts: `npx vitest@3`, `pnpm vitest`, `bun vitest` and `npm run-script test` count as test runs
+- tests: new test files, notebook cells, `.skip.each`/`.only.each` and git global options are checked
+- notify: the "needs you" notification arrives while the question is still open
+- compact: no repeated auto-compaction while context stays high; `/clear` drops old receipts
+- loops, pins, HUD, pane and doctor: smaller fixes listed in the review triage
+
 ## 1.0.0 (2026-10-07)
 
 Initial release.

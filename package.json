@@ -1,7 +1,7 @@
 {
   "name": "ultramod",
-  "version": "1.0.0",
-  "description": "Claude Code mods for context, safety, and a receipt for every turn",
+  "version": "1.0.1",
+  "description": "All-in-one mod pack for Claude Code: usage limits and context HUD, a guard with undo for risky commands, .env and secret protection, and a receipt for every turn",
   "type": "module",
   "files": [
     "plugin/",
@@ -33,12 +33,21 @@
     "claude-code",
     "claude-code-plugin",
     "claude-code-mods",
+    "claude-code-hooks",
+    "claude",
+    "anthropic",
     "mods",
     "hooks",
-    "context",
+    "statusline",
+    "usage-limits",
+    "context-window",
     "guard",
+    "undo",
     "secrets",
-    "ai-agents"
+    "redaction",
+    "ai-agents",
+    "ai-coding",
+    "developer-tools"
   ],
   "publishConfig": {
     "access": "public",

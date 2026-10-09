@@ -1,6 +1,6 @@
 <h1 align="center">Ultra Mod</h1>
 
-<p align="center">A mod pack for Claude Code. See context, limits and cost at a glance, stop the commands you would regret, keep secrets out of the model, and get a receipt for every turn.</p>
+<p align="center"><b>The all-in-one mod pack for Claude Code.</b> Ten mods in one install: your usage limits and context window above the prompt, a guard with undo for <code>rm -rf</code> and <code>git reset --hard</code>, <code>.env</code> files kept away from the model, and a receipt under every answer that shows what really ran.</p>
 
 <p align="center">
   <a href="https://github.com/mertkayacs/ultramod/actions/workflows/ci.yml"><img src="https://github.com/mertkayacs/ultramod/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
@@ -29,6 +29,10 @@ npx ultramod
 ```
 
 Open Claude Code and type `/ultra`. The defaults work as they are; `/plugin configure ultramod@ultramod` changes the default set, the notification delay and the sound.
+
+## Why Ultra Mod
+
+Most Claude Code setups grow the same pile of extras: a status line script for usage limits, a hook or two against `rm -rf`, something to keep `.env` out of reach, and the habit of scrolling back to check whether the tests really ran. Ultra Mod puts all of that in one plugin, built on the mods API that Claude Code shipped in 2.1.287. It never calls a model itself, and you can switch any mod off from the `/ultra` pane.
 
 ## What it does
 
