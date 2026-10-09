@@ -294,3 +294,14 @@ test('/ultra pin writes only the project pins file', async ($, on) => {
   expect(answer.text).toBe('Pinned: keep answers short')
   expect(writes).toEqual([{ path: '/work/project/.claude/pins.md', text: '- keep answers short\n' }])
 })
+
+test('/ultra pin without a project root writes nothing and says so', async ($, on) => {
+  mock.store(on)
+  const writes: { path: string; text: string }[] = []
+  on('session.root', () => ({ value: '' }))
+  on('fs.exists', () => ({ value: false }))
+  on('fs.write', ($, e) => { writes.push({ path: e.path, text: e.text }); return { value: undefined } })
+  const answer = await $.command.run({ command: 'ultra', args: 'pin keep answers short', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  expect(answer.text).toBe('Could not find the project root, so nothing was pinned.')
+  expect(writes).toEqual([])
+})

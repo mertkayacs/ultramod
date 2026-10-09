@@ -457,7 +457,7 @@ test('a snapshot commit message carries the redacted command', async ($, on) => 
 // through an inline cmd or PowerShell command.
 test('on Windows the temporary index is removed by the shipped script with a native path', async ($, on) => {
   const { state } = world(on)
-  on('env.get', () => ({ value: 'Windows_NT' }))
+  on('env.get', ($, e) => ({ value: e.name === 'OS' ? 'Windows_NT' : undefined }))
   state.answers.push('Run it')
   await $.tool.call(bash('git reset --hard'))
   const removal = argvOnly(state.runs).find(argv => argv.includes('-Path'))
@@ -525,4 +525,13 @@ test('/ultra undo keeps the spaces of the first path in a NUL list', async ($, o
   const answer = await $.command.run(command('undo 1'))
   expect(answer.text).toMatch(/^Snapshot 1 was not restored: {2}cfg is a file where the snapshot has a directory/)
   expect(argvOnly(state.runs).some(argv => argv[1] === 'checkout-index' || argv[1] === 'read-tree')).toBe(false)
+})
+
+test('under WSL the temporary index goes through rm -f even when OS=Windows_NT is carried over', async ($, on) => {
+  const { state } = world(on)
+  on('env.get', ($, e) => ({ value: e.name === 'OS' ? 'Windows_NT' : e.name === 'WSL_DISTRO_NAME' ? 'Ubuntu' : undefined }))
+  state.answers.push('Run it')
+  await $.tool.call(bash('git reset --hard'))
+  expect(argvOnly(state.runs)).toContainEqual(['rm', '-f', '.git/ultramod-index'])
+  expect(argvOnly(state.runs).some(argv => argv[0] === 'powershell.exe')).toBe(false)
 })

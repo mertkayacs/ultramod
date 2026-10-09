@@ -801,3 +801,13 @@ describe('aitmpl review round (1.0.6), second pass', () => {
     expect(runsElsewhere('sudo -Dsub git clean -fd')).toBe(false)
   })
 })
+
+describe('aitmpl review round 3 (1.0.8)', () => {
+  test('git clean reads its options only before --', () => {
+    expect(classifyCommand('git clean -f -- -Xfile')).toMatchObject({ id: 'git-clean', snapshot: true })
+    expect(classifyCommand('git clean -f -- -nfile')).toMatchObject({ id: 'git-clean', snapshot: true })
+    expect(classifyCommand('git clean -- -f')).toBeNull()
+    expect(classifyCommand('git clean -fn -- x')).toBeNull()
+    expect(classifyCommand('git clean -fx -- build')).toMatchObject({ id: 'git-clean', snapshot: false })
+  })
+})

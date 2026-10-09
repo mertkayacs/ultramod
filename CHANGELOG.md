@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.8 (2026-10-09)
+
+Fixes from the third review round on the claude-code-templates listing.
+
+### Fixes
+- guard: `git clean` reads its options only before `--`, so `git clean -f -- -nfile` is held (it read as a dry run and passed) and `git clean -f -- -Xfile` keeps its snapshot
+- pins: `/ultra pin` without a known project root writes nothing and says so (it wrote a relative `.claude/pins.md` that `/ultra pins` never reads)
+- notify, guard: under WSL the notifier script path goes through `wslpath` and the temporary index goes through `rm -f`, also when `WSLENV` carries `OS=Windows_NT` over
+- notify: on Windows the notification icon stays for the balloon's five seconds before it is removed (it went after two)
+
 ## 1.0.7 (2026-10-09)
 
 ### Fixes
