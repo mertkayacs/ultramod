@@ -74,6 +74,7 @@ Every program starts through `$.process.run` with an argument list; no shell rea
 
 - `git`, in the repository you work in, for guard's snapshots and `/ultra undo`:
   - `git rev-parse --is-inside-work-tree`, `git rev-parse --show-toplevel`, `git rev-parse --git-path ultramod-index`, `git rev-parse --verify HEAD`: find the repository, its root and the current commit.
+  - `git rev-parse --show-prefix`, only for a risky command whose paths climb above the session directory (`git -C .. reset --hard`): find where the session sits in the work tree, so a path that stays inside the repository still gets a snapshot.
   - `git add -A` and `git write-tree`, with `GIT_INDEX_FILE` set to the temporary index `ultramod-index`: record the work tree as it is, without touching your own index.
   - `git commit-tree <tree> [-p <HEAD>] -m "ultramod snapshot: <command>"` with the author and committer "Ultra Mod <ultramod@localhost>", then `git update-ref refs/worktree/ultramod/snapshots/<time> <commit>`: keep the snapshot as a ref. `git for-each-ref` lists them and `git update-ref -d` drops the oldest past 20.
   - `/ultra undo <n>`, after you confirm: `git rev-parse --git-path ultramod-restore-index`, `git add -A`, `git ls-files`, `git ls-tree -r --name-only --full-tree <snapshot>`, `git read-tree <snapshot>` and `git checkout-index --all --force`, all on the temporary index `ultramod-restore-index`, write the snapshot's files back into the work tree.

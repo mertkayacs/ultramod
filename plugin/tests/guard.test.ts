@@ -25,6 +25,8 @@ function world(on: On, set?: UltraSet) {
     verdict: { decision: 'allow' } as { decision: 'allow' | 'ask' | 'deny'; reason?: string },
     head: 'head123' as string | null, inside: true, failSubcommands: [] as string[],
     refList: '', snapshotList: '', lsTree: 'src/a.ts\nsrc/b.ts\n', nowFiles: '', refuseRefs: 0,
+    // The session directory below the work tree root, as git rev-parse --show-prefix prints it.
+    prefix: '',
   }
   on('session.root', () => ({ value: '/work' }))
   on('session.cwd', () => ({ value: '/work' }))
@@ -46,6 +48,7 @@ function world(on: On, set?: UltraSet) {
       if (a1 === 'rev-parse' && a2 === '--git-path') return ok('.git/ultramod-index')
       if (a1 === 'rev-parse' && a2 === '--verify') return state.head ? ok(state.head) : bad()
       if (a1 === 'rev-parse' && a2 === '--show-toplevel') return ok('/work')
+      if (a1 === 'rev-parse' && a2 === '--show-prefix') return state.prefix ? ok(state.prefix) : bad()
       if (a1 === 'add') return ok('')
       if (a1 === 'write-tree') return ok('tree123')
       if (a1 === 'commit-tree') return ok('commit123')
@@ -367,7 +370,7 @@ test('a command that acts in another repository is not promised a snapshot', asy
   state.answers.push('Run it')
   expect(await $.tool.call(bash('git -C ../other reset --hard'))).toEqual({ result: 'ok' })
   expect(state.asks[0]?.question).toBe('Run `git -C ../other reset --hard`? It discards uncommitted changes. It acts outside this session\'s repository, so no snapshot is saved and /ultra undo cannot restore it.')
-  expect(argvOnly(state.runs)).toEqual([])
+  expect(argvOnly(state.runs)).toEqual([['git', 'rev-parse', '--show-prefix']])
 })
 
 test('cd away from the session directory skips the snapshot in log mode too', async ($, on) => {
@@ -375,7 +378,7 @@ test('cd away from the session directory skips the snapshot in log mode too', as
   logging.mods.guard.mode = 'log'
   const { state } = world(on, logging)
   expect(await $.tool.call(bash('cd ../other && git reset --hard'))).toEqual({ result: 'ok' })
-  expect(argvOnly(state.runs)).toEqual([])
+  expect(argvOnly(state.runs)).toEqual([['git', 'rev-parse', '--show-prefix']])
 })
 
 // C50: the temporary index goes even when the snapshot fails midway.
@@ -472,5 +475,54 @@ test('/ultra undo names the paths that block a restore and writes nothing', asyn
   state.lsTree = 'cfg/app.txt\0other.txt\0'
   const answer = await $.command.run(command('undo 1'))
   expect(answer.text).toMatch(/^Snapshot 1 was not restored: cfg is a file where the snapshot has a directory/)
+  expect(argvOnly(state.runs).some(argv => argv[1] === 'checkout-index' || argv[1] === 'read-tree')).toBe(false)
+})
+
+// aitmpl review round (1.0.6)
+test('from a subdirectory, git -C .. inside the work tree still gets a snapshot', async ($, on) => {
+  const { state } = world(on)
+  state.prefix = 'pkg/\n'
+  state.answers.push('Run it')
+  expect(await $.tool.call(bash('git -C .. reset --hard'))).toEqual({ result: 'ok' })
+  expect(state.asks[0]?.question).toBe('Run `git -C .. reset --hard`? It discards uncommitted changes. A work tree snapshot is saved first, so /ultra undo can restore it.')
+  expect(argvOnly(state.runs).some(argv => argv[1] === 'commit-tree')).toBe(true)
+})
+
+test('from a subdirectory, a path above the work tree root is still elsewhere', async ($, on) => {
+  const { state } = world(on)
+  state.prefix = 'pkg/\n'
+  state.answers.push('Run it')
+  await $.tool.call(bash('git -C ../.. reset --hard'))
+  expect(state.asks[0]?.question).toContain('no snapshot is saved')
+  expect(argvOnly(state.runs).some(argv => argv[1] === 'commit-tree')).toBe(false)
+})
+
+test('the approval dialog masks known token formats in the full command', async ($, on) => {
+  const { state } = world(on)
+  state.answers.push('Refuse')
+  const long = `git reset --hard && curl -H "Authorization: Bearer ${TOKEN}" https://x.example/${'p'.repeat(150)}`
+  await $.tool.call(bash(long))
+  const question = state.asks[0]?.question ?? ''
+  expect(question).not.toContain(TOKEN)
+  expect(question).toContain('[redacted:')
+  expect(question).toContain('p'.repeat(150))
+})
+
+test('git clean -x is not promised a snapshot and saves none', async ($, on) => {
+  const { state } = world(on)
+  state.answers.push('Run it')
+  expect(await $.tool.call(bash('git clean -fdx'))).toEqual({ result: 'ok' })
+  expect(state.asks[0]?.question).toBe('Run `git clean -fdx`? It deletes untracked and ignored files.')
+  expect(argvOnly(state.runs)).toEqual([])
+})
+
+test('/ultra undo keeps the spaces of the first path in a NUL list', async ($, on) => {
+  const { state } = world(on)
+  state.snapshotList = 'sha9\t60\tultramod snapshot: rm -rf cfg\n'
+  state.answers.push('Restore')
+  state.nowFiles = ' cfg\0other.txt\0'
+  state.lsTree = ' cfg/app.txt\0other.txt\0'
+  const answer = await $.command.run(command('undo 1'))
+  expect(answer.text).toMatch(/^Snapshot 1 was not restored: {2}cfg is a file where the snapshot has a directory/)
   expect(argvOnly(state.runs).some(argv => argv[1] === 'checkout-index' || argv[1] === 'read-tree')).toBe(false)
 })

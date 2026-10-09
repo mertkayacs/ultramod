@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.0.6 (2026-10-09)
+
+Fixes for the second review round on the claude-code-templates listing (cubic, 15 findings against 1.0.1). Each fix has a test that fails on 1.0.5.
+
+### Security
+- guard: env options no longer hide the command after them: `env -0 rm -rf /`, `env -v`, `env --debug`, `env -u X`, `env -S 'rm -rf /'` and `env -S '-i' rm -rf /` (env splits the value into more arguments) are all checked; `env -S` nested more than eight levels deep is asked about as `unchecked`
+- guard: `bash /dev/stdin <<EOF`, `sh /dev/fd/0` and `source /dev/stdin` read the heredoc like `bash -s`, so its body is checked
+- guard: SQL is also read word by word as the shell passes it, with `$'...'` escapes decoded and PostgreSQL's comment rule (`--` needs no blank after it), so `psql -c $'DROP--x\nTABLE users'` and `$'DROP\tTABLE users'` are held
+- guard: SQL piped into a carrier behind a remote runner (`echo 'DROP TABLE users' | docker exec -i db psql`, `kubectl exec`, `ssh`) is checked
+- guard: a command that sets `GIT_DIR` or `GIT_WORK_TREE` after an env option (`env -u X GIT_DIR=..`), or starts in another directory (`env -C`, `sudo -D`), is not promised a snapshot of the session's repository
+- secrets: a glob is also read as the names it spells, so `cat client-cert.pem*` and `cat *.pem` are refused; `cp` of a secret glob to stdout counts as a read
+- secrets: `command env -0` and other wrapped or optioned env dumps count as dumps in strict mode; `env -i`, which prints only the pairs it is given, does not
+- guard: the approval dialog masks known token formats in the full command
+
+### Fixes
+- guard: `git clean -x` and `-X` are no longer promised an undo, since a snapshot does not hold ignored files
+- guard: from a subdirectory, `git -C .. reset --hard` inside the same work tree gets its snapshot (it was treated as another repository)
+- undo: a path that starts with a space is checked for conflicts before a restore (git's NUL-separated output is no longer trimmed)
+- receipts: `! npm test` and `cat <(npm test)` no longer count as passing tests
+- compact: a compaction another hook vetoes counts as failed, so auto mode tries again on the next turn
+
 ## 1.0.5 (2026-10-09)
 
 Plugin directory release: the hooks module is rebuilt so the directory's analyzer can read every hook. Behaviour is the same unless noted.

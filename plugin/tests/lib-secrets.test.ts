@@ -625,3 +625,48 @@ describe('redactSecrets AWS secret access keys (round 2, item 12)', () => {
     }
   })
 })
+
+describe('aitmpl review round (1.0.6)', () => {
+  test('a glob is read as the names it spells, beyond the fixed list', () => {
+    for (const [cmd, hit] of [
+      ['cat client-cert.pem*', 'client-cert.pem*'],
+      ['cat my-api.key*', 'my-api.key*'],
+      ['cat certs/*.pem', 'certs/*.pem'],
+      ['cat deploy-?.p12', 'deploy-?.p12'],
+      ['head prod[0-9].key', 'prod[0-9].key'],
+    ] as const) {
+      expect(bashReadsSecret(cmd)).toBe(hit)
+    }
+    for (const cmd of ['cat *.env', 'cat *.pub', 'cat id_rsa*.pub', 'cat src/*.key.ts', 'cat *', 'cat *.*', 'cat notes*.md']) {
+      expect(bashReadsSecret(cmd)).toBeNull()
+    }
+  })
+
+  test('cp of a secret glob to stdout is a read', () => {
+    expect(bashReadsSecret('cp .en* /dev/stdout')).toBe('.en*')
+    expect(bashReadsSecret('cp *.pem -')).toBe('*.pem')
+    expect(bashReadsSecret('cp *.pem backup/')).toBeNull()
+  })
+
+  test('env dumps are found behind wrappers and with any option', () => {
+    for (const cmd of ['command env -0', 'command env', 'nice env -0', 'env -v', 'env -u HOME', 'env -0 -u HOME', 'env --null FOO=1']) {
+      expect(isEnvDump(cmd)).toBe(true)
+    }
+    for (const cmd of ['env --help', 'env --version', 'command env -0 node server.js', 'env -v node app.js', "env -S 'node app.js'"]) {
+      expect(isEnvDump(cmd)).toBe(false)
+    }
+  })
+})
+
+describe('aitmpl review round (1.0.6), second pass', () => {
+  test('env -S options do not hide a secret read', () => {
+    expect(bashReadsSecret("env -S '-i' cat .env")).toBe('.env')
+  })
+
+  test('env -i prints only the pairs it is given, so it is no dump', () => {
+    for (const cmd of ['env -i', 'env -i FOO=1', 'env - FOO=1', 'env --ignore-environment', 'env -0i']) {
+      expect(isEnvDump(cmd)).toBe(false)
+    }
+    expect(isEnvDump('env -uI')).toBe(true)
+  })
+})

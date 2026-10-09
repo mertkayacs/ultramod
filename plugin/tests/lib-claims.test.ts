@@ -246,3 +246,20 @@ describe('exitProvesAll', () => {
     })
   }
 })
+
+describe('aitmpl review round (1.0.6)', () => {
+  test('a negated test run is no test result', () => {
+    for (const cmd of ['! npm test', 'if ! npm test; then echo broken; fi', '! pytest -q']) {
+      expect(commandKind(cmd)).toBeNull()
+    }
+    expect(commandKind('npm test -- --grep "!slow"')).toBe('test')
+    expect(commandKind('! npm test && npm run build')).toBe('build')
+  })
+
+  test('a zero exit does not vouch for a process substitution', () => {
+    expect(exitProvesAll('cat <(npm test)')).toBe(false)
+    expect(exitProvesAll('npm test > >(tee test.log)')).toBe(false)
+    expect(exitProvesAll('npm test 2>&1')).toBe(true)
+    expect(exitProvesAll('npm test -- --grep "<(x)"')).toBe(true)
+  })
+})

@@ -40,7 +40,9 @@ type GitResult = { ok: boolean; out: string }
 async function git(api: UltraApi, cwd: string, argv: string[], env?: Record<string, string>): Promise<GitResult> {
   try {
     const result = await api.process.run(argv, env ? { cwd, env } : { cwd })
-    return { ok: result.exitCode === 0, out: result.stdout.trim() }
+    // A NUL-separated list stays as git wrote it: trimming would cut the
+    // spaces off a path at either end.
+    return { ok: result.exitCode === 0, out: argv.includes('-z') ? result.stdout : result.stdout.trim() }
   } catch {
     return { ok: false, out: '' }
   }
@@ -68,6 +70,16 @@ const remover = (api: UltraApi): DropFile => async (cwd, path) => {
 async function snapshot(api: UltraApi, command: string): Promise<void> {
   const cwd = await api.session.cwd()
   await saveSnapshot(runner(api), remover(api), cwd, `${SNAPSHOT_PREFIX}${brief(command)}`, await api.clock.now(), why => { api.ui.log(`guard snapshot skipped: ${why}`) })
+}
+
+// runsElsewhere places paths below the session directory. From a
+// subdirectory, `..` can still be inside the work tree the snapshot saves, so
+// a hit is measured again from the work tree root.
+async function actsElsewhere(api: UltraApi, command: string): Promise<boolean> {
+  if (!runsElsewhere(command)) return false
+  const prefix = await git(api, await api.session.cwd(), ['git', 'rev-parse', '--show-prefix'])
+  if (!prefix.ok || !prefix.out) return true
+  return runsElsewhere(command, prefix.out.split('/').filter(Boolean))
 }
 
 type Snapshot = { sha: string; at: number; command: string }
@@ -108,7 +120,7 @@ export const guard: UltraMod = {
       if (!hit) return null
       // A snapshot saves this session's repository, which a command that
       // moves elsewhere does not change.
-      const elsewhere = hit.snapshot && runsElsewhere(command)
+      const elsewhere = hit.snapshot && await actsElsewhere(api, command)
       if (!(await allowIds(api)).includes(hit.id)) {
         if (mode === 'deny') {
           // Marathon refuses unattended; the notification is the only voice it has.
@@ -118,11 +130,12 @@ export const guard: UltraMod = {
         if (mode === 'log') {
           api.ui.log(`guard: ${hit.reason} (${brief(command)})`)
         } else {
-          // The whole command: the answer covers all of it, so a long one is not cut.
+          // The whole command: the answer covers all of it, so a long one is
+          // not cut. Known token formats are masked, as everywhere it is quoted.
           const note = !hit.snapshot ? '' : elsewhere
             ? ' It acts outside this session\'s repository, so no snapshot is saved and /ultra undo cannot restore it.'
             : ' A work tree snapshot is saved first, so /ultra undo can restore it.'
-          const question = `Run \`${command}\`? It ${hit.reason}.${note}`
+          const question = `Run \`${redactSecrets(command).text}\`? It ${hit.reason}.${note}`
           // An away user has to hear the dialog before it can wait for them.
           needsYou(api, `guard: run \`${brief(command)}\`?`)
           let answer: string
