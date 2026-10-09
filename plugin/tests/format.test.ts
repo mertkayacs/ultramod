@@ -9,6 +9,16 @@ test('formats tokens at display boundaries', () => {
   expect(fmtTokens(1_200_000)).toBe('1.2m')
 })
 
+// 999,500 rounds to 1000k, which reads as a different unit from 1m.
+test('token counts that round up to a thousand k read as millions', () => {
+  expect(fmtTokens(999_499)).toBe('999k')
+  expect(fmtTokens(999_500)).toBe('1m')
+  expect(fmtTokens(999_999)).toBe('1m')
+  expect(fmtTokens(1_000_000)).toBe('1m')
+  expect(fmtTokens(1_049_999)).toBe('1m')
+  expect(fmtTokens(1_100_000)).toBe('1.1m')
+})
+
 // fmtDuration: elapsed time, seconds kept under an hour (the HUD turn timer
 // and the receipt line).
 test('durations keep seconds under an hour', () => {
