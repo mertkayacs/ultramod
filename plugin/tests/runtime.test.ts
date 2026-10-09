@@ -164,6 +164,9 @@ test('when the stored set is unreadable, a checked tool is refused and any other
   on('tool.call', () => ({ result: 'ran' }))
   expect(await $.tool.call(probeCall('Bash'))).toEqual({ deny: REFUSED })
   expect(await $.tool.call(probeCall('WebFetch'))).toEqual({ result: 'ran' })
+  // The tool filter is anchored: a name that only contains a checked one is not checked.
+  expect(await $.tool.call(probeCall('BashOutput'))).toEqual({ result: 'ran' })
+  expect(await $.tool.call(probeCall('ReadMcpResourceTool'))).toEqual({ result: 'ran' })
 })
 
 test('every tool the checks read reaches them through the registration', async ($, on) => {
