@@ -1,6 +1,6 @@
 // Secret detection from SPEC 4.4: paths, bash reads, env dumps and redaction.
 // Plain TypeScript, no imports.
-import { splitCommand, commandTokens, baseName } from './shell'
+import { splitCommand, commandTokens, baseName, tokens } from './shell'
 
 const SAMPLE_WORDS = ['example', 'sample', 'template', 'dist']
 
@@ -89,27 +89,93 @@ const READERS = [
 
 // Script runners, handled by their own branch: the value of a config flag is a
 // file the process loads itself, and the script can name a secret too.
-const RUNNERS = new Set(['node', 'python', 'python3', 'perl', 'ruby'])
+const RUNNERS = new Set(['node', 'python', 'python3', 'perl', 'ruby', 'bun', 'deno'])
 
-const INLINE_FLAGS: Record<string, string[]> = {
-  node: ['-e', '-p'],
-  python: ['-c'],
-  python3: ['-c'],
-  perl: ['-e'],
-  ruby: ['-e'],
+// Short flags may be clustered (node -pe, perl -ne), so the flag letter is the
+// last character of the cluster. Long forms and subcommands are listed.
+const INLINE_SHORT: Record<string, RegExp> = {
+  node: /^-[a-zA-Z]*[ep]$/,
+  bun: /^-[a-zA-Z]*[ep]$/,
+  python: /^-[a-zA-Z]*c$/,
+  python3: /^-[a-zA-Z]*c$/,
+  perl: /^-[a-zA-Z]*[eE]$/,
+  ruby: /^-[a-zA-Z]*e$/,
+}
+
+const INLINE_WORDS: Record<string, string[]> = {
+  node: ['--eval', '--print'],
+  bun: ['--eval', '--print'],
+  deno: ['eval'],
 }
 
 // True when the argument carries an inline script for this runner.
 function hasInlineFlag(head: string, arg: string): boolean {
-  const flags = INLINE_FLAGS[head]
-  if (flags === undefined) return false
-  return flags.indexOf(arg) !== -1
+  const short = INLINE_SHORT[head]
+  if (short !== undefined && short.test(arg)) return true
+  const words = INLINE_WORDS[head]
+  return words !== undefined && words.indexOf(arg) !== -1
+}
+
+// node --eval=code and --print=code carry the script in the flag itself.
+function hasInlineAssignment(head: string, arg: string): boolean {
+  if (head !== 'node' && head !== 'bun') return false
+  return arg.startsWith('--eval=') || arg.startsWith('--print=')
+}
+
+// Flags whose next word is a value, not the script. Enough to tell a script
+// run from a script fed on stdin.
+const VALUE_FLAGS = new Set(['-r', '--require', '--import', '--loader', '--env-file', '--env-file-if-exists', '--input-type', '--conditions', '-C', '--cwd'])
+
+// The first protected env file a runner is told to load, or null.
+function secretEnvFile(args: string[], allow: string[] | undefined): string | null {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i] ?? ''
+    let file: string | undefined
+    if (a === '--env-file' || a === '--env-file-if-exists') file = args[i + 1]
+    else if (a.startsWith('--env-file=')) file = a.slice('--env-file='.length)
+    else if (a.startsWith('--env-file-if-exists=')) file = a.slice('--env-file-if-exists='.length)
+    if (file !== undefined && isSecretPath(file, allow)) return file
+  }
+  return null
+}
+
+// Can the script this runner executes print the values it loaded? True for an
+// inline script and for a script on stdin (no script file named, or "-").
+function scriptCanPrint(head: string, args: string[]): boolean {
+  let positional = 0
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i] ?? ''
+    if (hasInlineFlag(head, a) || hasInlineAssignment(head, a)) return true
+    if (a === '-') return true
+    if (a === '2>' || a === '2>>') {
+      i++
+      continue
+    }
+    // A here-document or here-string is input; what came before it decides.
+    if (a === '<<' || a === '<<<') break
+    if (a === '<') {
+      i++
+      continue
+    }
+    if (VALUE_FLAGS.has(a)) {
+      i++
+      continue
+    }
+    // node --test and node --run name what to run without a script argument.
+    if (a === '--test' || a === '--run' || a.startsWith('--run=')) {
+      positional++
+      continue
+    }
+    if (a.startsWith('-')) continue
+    positional++
+  }
+  return positional === 0
 }
 
 // A path token inside inline code that names a secret file.
-function secretPathInCode(code: string): string | null {
+function secretPathInCode(code: string, allow: string[] | undefined): string | null {
   for (const token of code.split(/[\s'"`()[\]{};,=<>!&|]+/)) {
-    if (token !== '' && isSecretPath(token)) return token
+    if (token !== '' && isSecretPath(token, allow)) return token
   }
   return null
 }
@@ -126,9 +192,12 @@ function stdoutRedirected(words: string[]): boolean {
 /**
  * The secret path a bash command would print (cat, head, tail, less, more,
  * bat, grep, rg, awk, sed, cut, base64, xxd, od, strings, cp/scp to stdout),
- * across compound commands. source is not a read. null otherwise.
+ * across compound commands. source is not a read. A script runner that loads
+ * a protected --env-file and runs an inline or stdin script can print its
+ * values, so that counts too. Paths in allow are spared (see isSecretPath).
+ * null otherwise.
  */
-export function bashReadsSecret(cmd: string): string | null {
+export function bashReadsSecret(cmd: string, allow?: string[]): string | null {
   for (const simple of splitCommand(cmd)) {
     const words = commandTokens(simple)
     if (words.length === 0) continue
@@ -138,7 +207,7 @@ export function bashReadsSecret(cmd: string): string | null {
       const dest = args[args.length - 1]
       if (dest === '/dev/stdout' || dest === '-' || dest === '/dev/fd/1' || dest === '/proc/self/fd/1') {
         for (const a of args.slice(0, -1)) {
-          if (isSecretPath(a) === true) return a
+          if (isSecretPath(a, allow) === true) return a
         }
       }
       continue
@@ -147,6 +216,11 @@ export function bashReadsSecret(cmd: string): string | null {
     if (isRunner === false && READERS.indexOf(head) === -1) continue
     if (stdoutRedirected(words)) continue
     if (head === 'sed' && args.some((a) => a === '-i' || a === '--in-place' || a.startsWith('-i'))) continue
+    if (isRunner) {
+      // Loading the file is no read, but a script that can print runs after it.
+      const loaded = secretEnvFile(args, allow)
+      if (loaded !== null && scriptCanPrint(head, args)) return loaded
+    }
     for (let i = 0; i < args.length; i++) {
       const a = args[i] ?? ''
       if (a === '2>' || a === '2>>') {
@@ -156,32 +230,50 @@ export function bashReadsSecret(cmd: string): string | null {
       if (a === '<' || a === '<<') continue
       if (a === '>' || a === '>>' || a === '1>' || a === '1>>' || a === '&>') break
       // --env-file .env names the file the process loads, not a read.
-      if (a === '--env-file') {
+      if (a === '--env-file' || a === '--env-file-if-exists') {
         i++
         continue
       }
-      if (a.startsWith('--env-file=')) continue
-      if (isRunner && hasInlineFlag(head, a)) {
-        const code = args[i + 1]
-        i++
+      if (a.startsWith('--env-file=') || a.startsWith('--env-file-if-exists=')) continue
+      if (isRunner && (hasInlineFlag(head, a) || hasInlineAssignment(head, a))) {
+        const code = hasInlineAssignment(head, a) ? a.slice(a.indexOf('=') + 1) : args[i + 1]
+        if (!hasInlineAssignment(head, a)) i++
         if (code !== undefined) {
-          const hit = secretPathInCode(code)
+          const hit = secretPathInCode(code, allow)
           if (hit !== null) return hit
         }
         continue
       }
-      if (isSecretPath(a) === true) return a
+      if (isSecretPath(a, allow) === true) return a
     }
   }
   return null
 }
 
+// env -0 and env --null print the whole environment NUL-separated.
+// commandTokens reads the flag as the command env runs, so this looks at the
+// plain words.
+function isNullSeparatedEnv(simple: string): boolean {
+  const t = tokens(simple)
+  let i = 0
+  while (i < t.length && ['sudo', 'nohup'].indexOf(baseName(t[i] ?? '')) !== -1) i++
+  if (baseName(t[i] ?? '') !== 'env') return false
+  let formatted = false
+  for (const a of t.slice(i + 1)) {
+    if (a === '-0' || a === '--null') formatted = true
+    else if (!/^[A-Za-z_][A-Za-z0-9_]*=/.test(a)) return false
+  }
+  return formatted
+}
+
 /**
  * True for bare env, printenv, set (the bash dump), export -p and bare
- * export. env FOO=1 cmd and printenv HOME are not dumps.
+ * export, also in their null-separated forms (env -0, printenv --null).
+ * env FOO=1 cmd and printenv HOME are not dumps.
  */
 export function isEnvDump(cmd: string): boolean {
   for (const simple of splitCommand(cmd)) {
+    if (isNullSeparatedEnv(simple)) return true
     const words = commandTokens(simple)
     if (words.length === 0) continue
     const head = baseName(words[0] ?? '')
@@ -192,7 +284,8 @@ export function isEnvDump(cmd: string): boolean {
       while (k < args.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(args[k] ?? '')) k++
       if (k === args.length) return true
     }
-    if (head === 'printenv' && args.length === 0) return true
+    // -0 and --null only change the separator, not what is printed.
+    if (head === 'printenv' && args.every(a => a === '-0' || a === '--null')) return true
     if (head === 'set' && args.length === 0) return true
     if (head === 'export' && (args.length === 0 || args[0] === '-p')) return true
   }
@@ -247,6 +340,7 @@ const TOKEN_PATTERNS: { kind: string; re: RegExp }[] = [
 
 const PRIVATE_BEGIN = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/g
 const PRIVATE_END = '-----END '
+const PRIVATE_KEY_TAIL = 'PRIVATE KEY-----'
 const REDACTED_KEY = '[redacted:private-key]'
 
 // BEGIN-to-END pairing via one scan for each marker plus a binary search per
@@ -259,12 +353,23 @@ function redactPrivateKeys(text: string, bump: (kind: string) => void): string {
     begins.push({ start: m.index, after: m.index + m[0].length })
   }
   if (begins.length === 0) return text
+  // One END line counts when PRIVATE KEY----- appears on it. The next newline
+  // and the next PRIVATE KEY----- are cached, so a line full of END markers
+  // costs one scan, not one per marker.
   const ends: number[] = []
+  let lineEnd = -1
+  let keyAt = -1
   let e = text.indexOf(PRIVATE_END)
   while (e !== -1) {
-    const nl = text.indexOf('\n', e + PRIVATE_END.length)
-    const stop = nl === -1 ? text.length : nl
-    if (text.slice(e, stop).indexOf('PRIVATE KEY-----') !== -1) ends.push(stop)
+    if (lineEnd < e) {
+      const nl = text.indexOf('\n', e + PRIVATE_END.length)
+      lineEnd = nl === -1 ? text.length : nl
+    }
+    if (keyAt !== Infinity && keyAt < e) {
+      const found = text.indexOf(PRIVATE_KEY_TAIL, e)
+      keyAt = found === -1 ? Infinity : found
+    }
+    if (keyAt < lineEnd) ends.push(lineEnd)
     e = text.indexOf(PRIVATE_END, e + PRIVATE_END.length)
   }
   let out = ''
@@ -293,7 +398,54 @@ function redactPrivateKeys(text: string, bump: (kind: string) => void): string {
   return out
 }
 
-const ASSIGNMENT = /([A-Za-z0-9_-]*(?:password|secret|token|api[_-]key))['"]?\s*[=:]\s*["']?([^\s"']{20,})/gi
+// Names whose value is worth checking: password, secret, token, api_key.
+const ASSIGNMENT_WORD = /password|secret|token|api[_-]key/gi
+
+const MIN_ASSIGNED = 20
+
+// The characters \s matches, tested by code: a regex call per character is slow.
+function isSpace(text: string, at: number): boolean {
+  const c = text.charCodeAt(at)
+  if (c <= 32) return c === 32 || (c >= 9 && c <= 13)
+  return c === 0xa0 || c === 0x1680 || (c >= 0x2000 && c <= 0x200a) || c === 0x2028 || c === 0x2029
+    || c === 0x202f || c === 0x205f || c === 0x3000 || c === 0xfeff
+}
+
+// key = value assignments, found with one pass over the text: the name words
+// are located first, then each hit is read forward once. A pattern that
+// retried the identifier before the name at every position would be
+// quadratic. The key text is kept as it is, so it needs no backward scan.
+function redactAssignments(text: string, bump: (kind: string) => void): string {
+  const n = text.length
+  let out = ''
+  let copied = 0
+  ASSIGNMENT_WORD.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = ASSIGNMENT_WORD.exec(text)) !== null) {
+    const wordEnd = m.index + m[0].length
+    // Names may overlap (secretoken holds secret and token), so a miss moves
+    // the search by one character.
+    ASSIGNMENT_WORD.lastIndex = m.index + 1
+    let p = wordEnd
+    if (text[p] === '"' || text[p] === "'") p++
+    while (p < n && isSpace(text, p)) p++
+    if (text[p] !== '=' && text[p] !== ':') continue
+    p++
+    while (p < n && isSpace(text, p)) p++
+    if (text[p] === '"' || text[p] === "'") p++
+    const valueStart = p
+    while (p < n && !isSpace(text, p) && text[p] !== '"' && text[p] !== "'") p++
+    if (p - valueStart < MIN_ASSIGNED) continue
+    // A value that was read is not searched again, kept or not.
+    ASSIGNMENT_WORD.lastIndex = p
+    const value = text.slice(valueStart, p)
+    if (PLACEHOLDER.test(value) || entropy(value) < 3.5 || classCount(value) < 3) continue
+    bump('assignment')
+    out += text.slice(copied, wordEnd) + '=[redacted:assignment]'
+    copied = p
+  }
+  return copied === 0 ? text : out + text.slice(copied)
+}
 
 export interface RedactionResult {
   text: string
@@ -320,14 +472,7 @@ export function redactSecrets(text: string): RedactionResult {
     p.re.lastIndex = 0
   }
 
-  out = out.replace(ASSIGNMENT, (full: string, key: string, value: string) => {
-    if (PLACEHOLDER.test(value)) return full
-    if (value.length < 20) return full
-    if (entropy(value) < 3.5) return full
-    if (classCount(value) < 3) return full
-    bump('assignment')
-    return key + '=[redacted:assignment]'
-  })
+  out = redactAssignments(out, bump)
 
   const hits: { kind: string; count: number }[] = []
   for (const [kind, count] of counts) hits.push({ kind, count })

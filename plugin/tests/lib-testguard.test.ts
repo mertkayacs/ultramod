@@ -175,3 +175,70 @@ describe('bashDeletesTests', () => {
     expect(bashDeletesTests('rm -rf node_modules')).toEqual([])
   })
 })
+
+describe('addedMarkers parameterized modifiers (C56)', () => {
+  test('detects .skip.each and .only.each', () => {
+    expect(addedMarkers('test.each([1])("a", () => {})', 'test.skip.each([1])("a", () => {})')).toEqual(['.skip.each'])
+    expect(addedMarkers('it.each([1])("a", () => {})', 'it.only.each([1])("a", () => {})')).toEqual(['.only.each'])
+    expect(addedMarkers('describe.each([1])("a", () => {})', 'describe.skip.each([1])("a", () => {})')).toEqual(['.skip.each'])
+  })
+
+  test('detects the tagged template form', () => {
+    expect(addedMarkers('test.each`a`("x", () => {})', 'test.skip.each`a`("x", () => {})')).toEqual(['.skip.each'])
+  })
+
+  test('an unchanged parameterized skip is not new', () => {
+    expect(addedMarkers('test.skip.each([1])("a", f)', 'test.skip.each([1])("a", f)')).toEqual([])
+  })
+})
+
+describe('bashDeletesTests option parsing (C57)', () => {
+  test('operands after -- are paths even when they start with a dash', () => {
+    expect(bashDeletesTests('rm -- -suite.test.ts')).toEqual(['-suite.test.ts'])
+    expect(bashDeletesTests('rm -f -- a.ts -b.spec.ts')).toEqual(['-b.spec.ts'])
+    expect(bashDeletesTests('git rm -- -x.test.ts')).toEqual(['-x.test.ts'])
+  })
+
+  test('flags before -- are still flags', () => {
+    expect(bashDeletesTests('rm -rf -- foo.test.ts')).toEqual(['foo.test.ts'])
+    expect(bashDeletesTests('rm -f README.md')).toEqual([])
+  })
+})
+
+describe('bashDeletesTests git global options (C58)', () => {
+  test('git -C and -c before rm', () => {
+    expect(bashDeletesTests('git -C /repo rm tests/unit.test.ts')).toEqual(['tests/unit.test.ts'])
+    expect(bashDeletesTests('git -c core.quotepath=off rm tests/unit.test.ts')).toEqual(['tests/unit.test.ts'])
+  })
+
+  test('long global options with a value or an equals sign', () => {
+    expect(bashDeletesTests('git --git-dir /repo/.git --work-tree /repo rm foo.spec.ts')).toEqual(['foo.spec.ts'])
+    expect(bashDeletesTests('git --git-dir=/repo/.git rm foo.spec.ts')).toEqual(['foo.spec.ts'])
+    expect(bashDeletesTests('git --no-pager rm foo.spec.ts')).toEqual(['foo.spec.ts'])
+  })
+
+  test('other git subcommands are not deletions', () => {
+    expect(bashDeletesTests('git -C /repo status tests/unit.test.ts')).toEqual([])
+    expect(bashDeletesTests('git -C /repo add tests/unit.test.ts')).toEqual([])
+  })
+})
+
+describe('bashDeletesTests truncating redirects (C59)', () => {
+  test('2> and &> empty their target', () => {
+    expect(bashDeletesTests('cmd 2> tests/unit.test.ts')).toEqual(['tests/unit.test.ts'])
+    expect(bashDeletesTests('cmd 2>tests/unit.test.ts')).toEqual(['tests/unit.test.ts'])
+    expect(bashDeletesTests('cmd &> tests/unit.test.ts')).toEqual(['tests/unit.test.ts'])
+    expect(bashDeletesTests('cmd 3> app.test.ts')).toEqual(['app.test.ts'])
+  })
+
+  test('appending and fd duplication do not empty anything', () => {
+    expect(bashDeletesTests('cmd 2>> app.test.ts')).toEqual([])
+    expect(bashDeletesTests('cmd &>> app.test.ts')).toEqual([])
+    expect(bashDeletesTests('cmd 2>&1')).toEqual([])
+    expect(bashDeletesTests('cmd > out.log 2>&1')).toEqual([])
+  })
+
+  test('a redirect after rm is still checked', () => {
+    expect(bashDeletesTests('rm a.ts 2> app.test.ts')).toEqual(['app.test.ts'])
+  })
+})

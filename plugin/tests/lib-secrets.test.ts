@@ -280,3 +280,136 @@ describe('redactSecrets', () => {
     expect(r.hits).toEqual([])
   })
 })
+
+describe('bashReadsSecret with a protected env file (C05)', () => {
+  const LEAKS: string[] = [
+    "node --env-file=.env -p 'process.env.API_KEY'",
+    'node --env-file .env -e "console.log(process.env.API_KEY)"',
+    "node --env-file=.env --print 'process.env.API_KEY'",
+    'node --env-file=.env --eval "console.log(process.env.API_KEY)"',
+    'node --env-file=.env --eval="console.log(process.env.API_KEY)"',
+    "node --env-file=.env -pe 'process.env.API_KEY'",
+    "node --env-file-if-exists=.env -p 'process.env.API_KEY'",
+    "node --env-file=.env <<< 'console.log(process.env.API_KEY)'",
+    "echo 'console.log(process.env.API_KEY)' | node --env-file=.env -",
+    "cd app && node --env-file=config/.env.production -p 'process.env.API_KEY'",
+    "bun --env-file=.env -e 'console.log(process.env.API_KEY)'",
+    "deno eval --env-file=.env 'console.log(Deno.env.get(\"API_KEY\"))'",
+  ]
+
+  test('an inline or stdin script that loads a protected env file reads it', () => {
+    for (const cmd of LEAKS) expect(bashReadsSecret(cmd), cmd).not.toBe(null)
+  })
+
+  test('the reported path is the env file', () => {
+    expect(bashReadsSecret("node --env-file=.env -p 'process.env.API_KEY'")).toBe('.env')
+    expect(bashReadsSecret('node --env-file .env.local -e "1"')).toBe('.env.local')
+  })
+
+  test('a sample env file or a script run stays allowed', () => {
+    expect(bashReadsSecret("node --env-file=.env.example -p 'process.env.A'")).toBe(null)
+    expect(bashReadsSecret('node --env-file=.env server.js')).toBe(null)
+    expect(bashReadsSecret('node --env-file=.env --watch server.js')).toBe(null)
+    expect(bashReadsSecret('node --env-file=.env -r ./setup.js server.js')).toBe(null)
+    expect(bashReadsSecret('bun --env-file=.env.local run dev')).toBe(null)
+    expect(bashReadsSecret('node --env-file=.env --test')).toBe(null)
+    expect(bashReadsSecret('node --env-file=.env --run dev')).toBe(null)
+  })
+
+  test('printing without loading the file is not a read', () => {
+    expect(bashReadsSecret("node -p 'process.env.HOME'")).toBe(null)
+  })
+
+  test('stdout redirected away is not a read', () => {
+    expect(bashReadsSecret("node --env-file=.env -p 'process.env.A' > /tmp/out")).toBe(null)
+  })
+})
+
+describe('bashReadsSecret honors the allow list (C10)', () => {
+  test('a basename entry spares the same file under another folder', () => {
+    expect(bashReadsSecret('cat /work/.env', ['.env'])).toBe(null)
+    expect(bashReadsSecret('cat /work/.env', ['/work/.env'])).toBe(null)
+  })
+
+  test('only the allowed file is spared', () => {
+    expect(bashReadsSecret('cat .env .npmrc', ['.env'])).toBe('.npmrc')
+    expect(bashReadsSecret('cat .npmrc', ['.env'])).toBe('.npmrc')
+  })
+
+  test('an allowed env file spares the loading script', () => {
+    expect(bashReadsSecret("node --env-file=.env -p 'process.env.A'", ['.env'])).toBe(null)
+  })
+})
+
+describe('isEnvDump null-separated forms (C06)', () => {
+  test('printenv and env with only formatting flags dump the environment', () => {
+    for (const cmd of ['printenv --null', 'printenv -0', 'env -0', 'env --null', 'env | tr "\\0" "\\n"', 'printenv -0 | tr "\\0" "\\n"']) {
+      expect(isEnvDump(cmd), cmd).toBe(true)
+    }
+  })
+
+  test('a named variable is still not a dump', () => {
+    for (const cmd of ['printenv -0 HOME', 'printenv --null HOME PATH', 'env -0 node server.js']) {
+      expect(isEnvDump(cmd), cmd).toBe(false)
+    }
+  })
+})
+
+describe('redactSecrets stays linear on adversarial text (C07, G04)', () => {
+  const LIMIT_MS = 500
+
+  function timed(text: string): { ms: number; out: string } {
+    const t0 = Date.now()
+    const r = redactSecrets(text)
+    return { ms: Date.now() - t0, out: r.text }
+  }
+
+  test('1 MB single token with no separator', () => {
+    const { ms, out } = timed('a'.repeat(1_000_000))
+    expect(out.length).toBe(1_000_000)
+    expect(ms).toBeLessThan(LIMIT_MS)
+  })
+
+  test('1 MB run of identifier characters ending in a keyword', () => {
+    const { ms } = timed('a_'.repeat(500_000) + 'token')
+    expect(ms).toBeLessThan(LIMIT_MS)
+  })
+
+  test('1 MB of repeated keywords', () => {
+    for (const unit of ['token', 'password', 'api_key', 'secret-', 'token=', 'secret: ']) {
+      const { ms } = timed(unit.repeat(Math.ceil(1_000_000 / unit.length)))
+      expect(ms, unit).toBeLessThan(LIMIT_MS)
+    }
+  })
+
+  test('1 MB of spaces after a keyword', () => {
+    const { ms } = timed('token' + ' '.repeat(1_000_000) + 'x')
+    expect(ms).toBeLessThan(LIMIT_MS)
+  })
+
+  test('1 MB of unterminated key markers on one line', () => {
+    for (const unit of ['-----END ', '-----BEGIN ', '-----BEGIN RSA PRIVATE KEY----- ', 'sk-ant-', 'github_pat_', 'AKIA']) {
+      const { ms } = timed(unit.repeat(Math.ceil(1_000_000 / unit.length)))
+      expect(ms, unit).toBeLessThan(LIMIT_MS)
+    }
+  })
+
+  test('1 MB of END markers after an open key block', () => {
+    const { ms } = timed('-----BEGIN RSA PRIVATE KEY-----\n' + '-----END '.repeat(111_000))
+    expect(ms).toBeLessThan(LIMIT_MS)
+  })
+
+  test('a key block is still replaced whole after the rewrite', () => {
+    const r = redactSecrets('a -----BEGIN RSA PRIVATE KEY-----\nMIIE\n-----END RSA PRIVATE KEY-----\ntail')
+    expect(r.text).toBe('a [redacted:private-key]\ntail')
+  })
+
+  test('the assignment scan still redacts after the rewrite', () => {
+    const value = 'Sup3rS3cretL0ngPassw0rdXy9Z'
+    expect(redactSecrets(`MY_API_TOKEN: "${value}"`).text).toBe('MY_API_TOKEN=[redacted:assignment]"')
+    expect(redactSecrets(`db-password = '${value}' next`).text).toBe("db-password=[redacted:assignment]' next")
+    expect(redactSecrets(`SECRET_TOKEN=${value}\nPASSWORD=${value}`).text).toBe('SECRET_TOKEN=[redacted:assignment]\nPASSWORD=[redacted:assignment]')
+    expect(redactSecrets(`Api-Key:${value}`).text).toBe('Api-Key=[redacted:assignment]')
+    expect(redactSecrets(`tokenizer=${value}`).text).toBe(`tokenizer=${value}`)
+  })
+})
