@@ -15,17 +15,6 @@ import type { RiskHit } from '../lib/risk'
 // The validator wants every atom in a const of the file that reads and writes it.
 const allow = atom({ plugin: 'ultramod', key: 'allow' } as const, { risks: [], paths: [] })
 
-// Call ids the person approved in guard's own dialog. The engine asks for the
-// same call right after, and tool.check answers that ask with allow.
-const approved = atom({ plugin: 'ultramod', key: 'guard-approved' } as const, [] as string[])
-
-// Bounded: one id per approved call, oldest dropped past the limit.
-const KEEP_APPROVED = 32
-
-async function rememberApproved($: UltraApi, id: string): Promise<void> {
-  await update($, approved, ids => ids.includes(id) ? ids : [...ids, id].slice(-KEEP_APPROVED))
-}
-
 const cut = (command: string) => command.length > 120 ? `${command.slice(0, 117)}...` : command
 
 // A command quoted back to the model, a log, a notification or a commit
@@ -142,22 +131,13 @@ export const guard: UltraMod = {
             } else {
               return { deny: declinedText(command, hit) }
             }
-            // Recorded before next: the engine raises tool.check inside it.
-            if (e.tool_use_id !== undefined) await rememberApproved($, e.tool_use_id)
+            // The engine may still show its own prompt after this dialog. No
+            // tool.check hook here: a permission hook only passes the check
+            // on or answers a fixed deny or ask, never allow.
           }
         }
         if (hit.snapshot && !elsewhere) await snapshot($, command)
         return next(e)
-      },
-    }],
-    'tool.check': [{
-      gating: true,
-      run: async ($, e: Frozen<Args<'tool.check'>>, next) => {
-        const verdict = await next(e)
-        const id = e.tool_use_id
-        if (verdict.decision !== 'ask' || id === undefined) return verdict
-        const ids = await read($, approved)
-        return ids.includes(id) ? { decision: 'allow' } : verdict
       },
     }],
   },

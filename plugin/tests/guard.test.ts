@@ -21,7 +21,6 @@ function world(on: On, set?: UltraSet) {
   const state = {
     runs: [] as Run[], logs: [] as string[], asks: [] as Ask[], answers: [] as string[],
     dismissAsks: false, breakAsks: false, allow: { risks: [] as string[], paths: [] as string[] },
-    approved: [] as string[],
     // What the engine answers tool.check: allow unless a test says otherwise.
     verdict: { decision: 'allow' } as { decision: 'allow' | 'ask' | 'deny'; reason?: string },
     head: 'head123' as string | null, inside: true, failSubcommands: [] as string[],
@@ -32,10 +31,6 @@ function world(on: On, set?: UltraSet) {
   on('ui.log', ($, e) => { state.logs.push(e.text); return { value: undefined } })
   on('state.set', { plugin: 'ultramod', key: 'allow' }, ($, e, next) => {
     state.allow = e.value as typeof state.allow
-    return next(e)
-  })
-  on('state.set', { plugin: 'ultramod', key: 'guard-approved' }, ($, e, next) => {
-    state.approved = e.value as typeof state.approved
     return next(e)
   })
   on('tool.check', () => state.verdict)
@@ -315,25 +310,25 @@ test('subagent Bash commands are gated too', async ($, on) => {
   expect(denied).toMatchObject({ deny: expect.any(String) })
 })
 
-// The engine raises tool.check after guard's own dialog and would open its own
-// permission prompt for the same call; the bottom answers `ask` as that prompt
-// would, and `ask` on an id guard never approved stays `ask`.
-test('Run it lets the engine prompt pass for the same call', async ($, on) => {
+// Directory rule: a permission hook passes the check on or answers a fixed
+// deny or ask. After guard's own dialog the engine may still show its prompt;
+// guard never turns that ask into an allow.
+test('Run it leaves the engine prompt for the same call alone', async ($, on) => {
   const { state } = world(on)
   state.answers.push('Run it')
   state.verdict = { decision: 'ask' }
   await $.tool.call({ tool: 'Bash', command: 'git reset --hard', tool_use_id: 'tu_run-it' })
   const check: Args<'tool.check'> = { tool: 'Bash', input: { command: 'git reset --hard' }, tool_use_id: 'tu_run-it' }
-  expect(await $.tool.check(check)).toEqual({ decision: 'allow' })
+  expect(await $.tool.check(check)).toEqual({ decision: 'ask' })
 })
 
-test('Allow for session lets the engine prompt pass for the same call', async ($, on) => {
+test('Allow for session leaves the engine prompt for the same call alone', async ($, on) => {
   const { state } = world(on)
   state.answers.push('Allow for session')
   state.verdict = { decision: 'ask' }
   await $.tool.call({ tool: 'Bash', command: 'git reset --hard', tool_use_id: 'tu_allow' })
   const check: Args<'tool.check'> = { tool: 'Bash', input: { command: 'git reset --hard' }, tool_use_id: 'tu_allow' }
-  expect(await $.tool.check(check)).toEqual({ decision: 'allow' })
+  expect(await $.tool.check(check)).toEqual({ decision: 'ask' })
   expect(state.allow).toEqual({ risks: ['git-reset-hard'], paths: [] })
 })
 
@@ -348,7 +343,7 @@ test('a refused call and an unknown id still go to the engine prompt', async ($,
   expect(await $.tool.check(other)).toEqual({ decision: 'ask' })
 })
 
-test('a deny beneath us is never turned into an allow', async ($, on) => {
+test('a deny beneath guard is passed on unchanged', async ($, on) => {
   const { state } = world(on)
   state.answers.push('Run it')
   state.verdict = { decision: 'deny', reason: 'blocked by a rule' }

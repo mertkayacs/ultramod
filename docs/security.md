@@ -8,7 +8,7 @@
 |-----|---------------|--------|
 | hud | `ui.render` (AbovePrompt) | no |
 | receipts | `session.start`, `session.end`, `classic.SessionStart`, `turn.start`, `tool.call`, `turn.complete` | no |
-| guard | `tool.call` (Bash), `tool.check` | yes (`.catch` fails closed) |
+| guard | `tool.call` (Bash) | yes (`.catch` fails closed) |
 | secrets | `tool.call` (Read, Edit, Write, MultiEdit, NotebookEdit, Grep, Glob, Bash), `session.append` | yes (`.catch` fails closed on tool.call; session.append fails open) |
 | tests | `tool.call` (Edit, MultiEdit, Write, NotebookEdit, Bash) | yes (`.catch` fails closed) |
 | notify | `turn.complete`, `classic.Notification` | no |
@@ -25,10 +25,10 @@ Every mod reads its settings through the shared sets engine (`$.state.get` on `u
 |-----|-------|
 | hud | `$.state.get` (set, turn), `$.state.set` (turn), `$.clock.now`, `$.clock.every`, `$.session.usage`, `$.session.model`, `$.ui.resolve` |
 | receipts | `$.state.get` (set, receipts), `$.state.set` (receipts), `$.session.usage`, `$.clock.now` |
-| guard | `$.state.get` (set, allow, guard-approved), `$.state.set` (allow, guard-approved), `$.ui.ask`, `$.ui.log`, `$.ui.toast`, `$.process.run` (git, `rm -f` or `cmd /c del` for the snapshot's temporary index, and the notifier's uname, which, notify-send, osascript, powershell.exe), `$.clock.now`, `$.clock.after`, `$.session.cwd`, `$.session.root`, `$.env.get` (OS, WSL_DISTRO_NAME), `$.audio.play` |
+| guard | `$.state.get` (set, allow), `$.state.set` (allow), `$.ui.ask`, `$.ui.log`, `$.ui.toast`, `$.process.run` (git, `rm -f` or `cmd /c del` for the snapshot's temporary index, and the notifier's uname, which, notify-send, osascript, wslpath, powershell.exe), `$.clock.now`, `$.clock.after`, `$.session.cwd`, `$.session.root`, `$.env.get` (OS, WSL_DISTRO_NAME), `$.plugin.root`, `$.audio.play` |
 | secrets | `$.state.get` (set, allow), `$.state.set` (allow), `$.ui.log` |
 | tests | `$.state.get` (set), `$.fs.read`, `$.fs.exists`, `$.ui.ask`, plus the notifier calls (`$.clock.after`, `$.clock.now`, `$.env.get`, `$.process.run`, `$.ui.toast`, `$.audio.play`, `$.session.root`) |
-| notify | `$.state.get` (set), `$.env.get` (OS, WSL_DISTRO_NAME), `$.process.run` (uname, which, notify-send, osascript, powershell.exe), `$.ui.toast`, `$.audio.play`, `$.clock.now`, `$.clock.after`, `$.session.root` |
+| notify | `$.state.get` (set), `$.env.get` (OS, WSL_DISTRO_NAME), `$.process.run` (uname, which, notify-send, osascript, wslpath, powershell.exe), `$.plugin.root`, `$.ui.toast`, `$.audio.play`, `$.clock.now`, `$.clock.after`, `$.session.root` |
 | compact | `$.state.get` (set, receipts, compact), `$.state.set` (compact), `$.session.usage`, `$.session.compact`, `$.clock.after`, `$.ui.toast`, `$.ui.log`, `$.ui.resolve` |
 | loops | `$.state.get` (set), `$.ui.toast` |
 | pins | `$.state.get` (set), `$.fs.stat`, `$.fs.read`, `$.fs.write` (via `/ultra pin`), `$.env.get` (HOME, USERPROFILE), `$.session.root` |
@@ -60,7 +60,7 @@ The core outside the mods also calls `$.store.get`/`$.store.set` (the per-projec
 | guard | `git` (rev-parse, add, write-tree, commit-tree, update-ref, for-each-ref, ls-tree, restore), `rm` or `cmd /c del` (temporary index cleanup), and the notifier commands below when a dialog waits or is refused |
 | secrets | none |
 | tests | the notifier commands below when a dialog waits |
-| notify | `uname -s` and `which` (detection), then `notify-send` (Linux), `osascript` (macOS) or `powershell.exe` (Windows) |
+| notify | `uname -s` and `which` (detection), then `notify-send` (Linux), `osascript scripts/notify.applescript` (macOS) or `powershell.exe -File scripts/notify.ps1` (Windows; `wslpath -w` converts the script path under WSL) |
 | compact | none |
 | loops | none |
 | pins | none |
@@ -91,7 +91,7 @@ The core outside the mods also calls `$.store.get`/`$.store.set` (the per-projec
 Validating plugin manifest: ./plugin/.claude-plugin/plugin.json
 
   ❯ types ./types/index.d.ts declares on $: nothing (no EngineInterface member)
-  ❯ types ./types/index.d.ts declares state: ultramod.set, ultramod.turn, ultramod.receipts, ultramod.allow, ultramod.compact, ultramod.guard-approved
+  ❯ types ./types/index.d.ts declares state: ultramod.set, ultramod.turn, ultramod.receipts, ultramod.allow, ultramod.compact
 
 Validating hooks: ./plugin/hooks/hooks.json
 
@@ -105,9 +105,9 @@ Validating hooks: ./plugin/hooks/hooks.json
   ❯ ./register.tsx gating hook without .catch: classic.Notification
   ❯ ./register.tsx calls: $.audio.play (via createApi), $.clock.after (via createApi), $.clock.every (via createApi), $.clock.now (via createApi), $.command.register (via createApi), $.env.get (via createApi), $.fs.exists (via createApi), $.fs.read (via createApi), $.fs.stat (via createApi), $.fs.write (via createApi), $.process.run (via createApi), $.session.compact (via createApi), $.session.cwd (via createApi), $.session.id (via createApi), $.session.model (via createApi), $.session.root (via createApi), $.session.usage (via createApi), $.session.version (via createApi), $.state.get (via createApi), $.state.set (via createApi), $.store.delete (via createApi), $.store.get (via createApi), $.store.keys (via createApi), $.store.set (via createApi), $.ui.ask (via createApi), $.ui.close (via createApi), $.ui.invalidate (via createApi), $.ui.log (via createApi), $.ui.open (via createApi), $.ui.resolve (via createApi), $.ui.status (via createApi), $.ui.toast (via createApi)
   ❯ ./register.tsx env writes: nothing
-  ❯ ./register.tsx env reads: HOME, OS, TERM_PROGRAM, USERPROFILE, WSL_DISTRIBUTION_NAME
-  ❯ ./register.tsx state writes: ultramod.allow, ultramod.compact, ultramod.guard-approved, ultramod.receipts, ultramod.set, ultramod.turn
-  ❯ ./register.tsx state reads: ultramod.allow, ultramod.compact, ultramod.guard-approved, ultramod.receipts, ultramod.set, ultramod.turn
+  ❯ ./register.tsx env reads: HOME, OS, TERM_PROGRAM, USERPROFILE, WSL_DISTRO_NAME
+  ❯ ./register.tsx state writes: ultramod.allow, ultramod.compact, ultramod.receipts, ultramod.set, ultramod.turn
+  ❯ ./register.tsx state reads: ultramod.allow, ultramod.compact, ultramod.receipts, ultramod.set, ultramod.turn
 
 ✔ Validation passed
 ```

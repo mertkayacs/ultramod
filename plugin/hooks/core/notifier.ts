@@ -61,18 +61,27 @@ async function kernel($: UltraApi): Promise<string> {
   }
 }
 
-// Quote-safe argv forms: no shell strings anywhere. AppleScript strings
-// cannot span lines, so control characters become spaces before the quotes
-// are escaped. PowerShell gets the body as base64 data, never as source: it
-// treats curly quotes as delimiters, so no escaping of the text is safe.
-function appleScript(body: string): string {
-  const safe = body.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-  return `display notification "${safe}" with title "Claude Code"`
+// Quote-safe argv forms: no shell strings and no inline programs. Both
+// platform notifiers run a script shipped in the plugin's scripts folder and
+// receive the text as data. AppleScript gets title and body as arguments, so a
+// quote or a newline in them is never script source. PowerShell gets the body
+// as base64: it treats curly quotes as delimiters, so no escaping of the text
+// is safe.
+function scriptPath(root: string, file: string): string {
+  const sep = root.includes('\\') ? '\\' : '/'
+  return `${root.replace(/[\\/]+$/, '')}${sep}scripts${sep}${file}`
 }
 
-function powerShell(body: string): string {
-  const encoded = base64(utf8(body))
-  return `$body = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${encoded}')); Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $n = New-Object System.Windows.Forms.NotifyIcon; $n.Icon = [System.Drawing.SystemIcons]::Information; $n.Visible = $true; $n.ShowBalloonTip(5000, 'Claude Code', $body, 'Info'); Start-Sleep -Seconds 2; $n.Dispose()`
+// powershell.exe under WSL reads Windows paths, so the script path goes
+// through wslpath. A failed conversion throws and the toast takes over.
+async function powerShellScript($: UltraApi): Promise<string> {
+  const script = scriptPath($.plugin.root, 'notify.ps1')
+  const [os, wsl] = await Promise.all([$.env.get('OS'), $.env.get('WSL_DISTRO_NAME')])
+  if (os === 'Windows_NT' || wsl === undefined || wsl === '') return script
+  const result = await $.process.run(['wslpath', '-w', script])
+  const converted = result.stdout.trim()
+  if (result.exitCode !== 0 || converted === '') throw new Error('wslpath could not convert the notifier script path')
+  return converted
 }
 
 function utf8(text: string): number[] {
@@ -172,8 +181,8 @@ export async function sendNotification($: UltraApi, body: string, settings: Ultr
     detection ??= detectNotifier($)
     const notifier = await detection.catch(() => 'toast' as Notifier)
     if (notifier === 'notify-send') await runNotifier($, ['notify-send', 'Claude Code', body])
-    else if (notifier === 'osascript') await runNotifier($, ['osascript', '-e', appleScript(body)])
-    else if (notifier === 'powershell') await runNotifier($, ['powershell.exe', '-NoProfile', '-Command', powerShell(body)])
+    else if (notifier === 'osascript') await runNotifier($, ['osascript', scriptPath($.plugin.root, 'notify.applescript'), 'Claude Code', body])
+    else if (notifier === 'powershell') await runNotifier($, ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', await powerShellScript($), '-BodyBase64', base64(utf8(body))])
     else $.ui.toast(body)
   } catch {
     try {
