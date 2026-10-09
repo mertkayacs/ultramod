@@ -1,6 +1,6 @@
 {
   "name": "ultramod",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "All-in-one mod pack for Claude Code: usage limits and context HUD, a guard with undo for risky commands, .env and secret protection, and a receipt for every turn",
   "type": "module",
   "files": [
@@ -54,7 +54,7 @@
     "provenance": true
   },
   "scripts": {
-    "validate": "claude plugin validate ./ --strict && node scripts/validate-plugin.mjs",
+    "validate": "claude plugin validate ./ --strict && claude plugin validate ./plugin --strict",
     "test": "claude plugin test ./plugin",
     "typecheck": "node scripts/engine-types.mjs && tsc --noEmit",
     "installer:test": "node --experimental-strip-types --test test/manifest.test.mjs test/scripts.test.mjs test/installer.test.mjs test/guard-git.test.mjs",
