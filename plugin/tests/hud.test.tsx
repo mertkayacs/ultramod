@@ -202,10 +202,11 @@ test('running turn redraws every second, counts successful edits and executed co
   await $.tool.call(multiEdit as unknown as ToolCallArgs)
   await $.tool.call({ tool: 'NotebookEdit', notebook_path: '/work/d.ipynb', new_source: 'd' })
   await $.tool.call({ tool: 'Bash', command: 'test command' })
-  await clock.advance(72_000)
-  expect(await ui.find({ type: 'Text', text: '1m12s 3 edits 1 cmd' })).toBeDefined()
-  await $.turn.complete({ turnId: 'main', answer: '', durationMs: 72_000, isAborted: false, reason: 'answer' })
-  expect(await ui.find({ type: 'Text', text: '1m12s' })).toBeDefined()
+  // Twelve seconds of one-second redraws; the minute formats are covered in format.test.ts.
+  await clock.advance(12_000)
+  expect(await ui.find({ type: 'Text', text: '12s 3 edits 1 cmd' })).toBeDefined()
+  await $.turn.complete({ turnId: 'main', answer: '', durationMs: 12_000, isAborted: false, reason: 'answer' })
+  expect(await ui.find({ type: 'Text', text: '12s' })).toBeDefined()
   const count = turns.length
   await clock.advance(5_000)
   expect(turns.length).toBe(count)
