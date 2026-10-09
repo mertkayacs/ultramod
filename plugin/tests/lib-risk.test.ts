@@ -492,3 +492,224 @@ describe('classifyCommand on pathological input', () => {
     expect(classifyCommand('${'.repeat(30) + '; rm -rf ~')?.id).toBe('rm-recursive')
   })
 })
+
+// Round 2 of the 1.0.1 hardening: every spelling here ran in bash and was
+// missed (or promised an undo it could not give) before the parser fix.
+describe('round 2 classification', () => {
+  const HIT: [string, string][] = [
+    // item 3: reserved words and groups hide nothing
+    ['if [ -d src ]; then rm -rf src; fi', 'rm-recursive'],
+    ['for d in a b; do rm -rf $d; done', 'rm-recursive'],
+    ['{ rm -rf src; }', 'rm-recursive'],
+    ['! git reset --hard', 'git-reset-hard'],
+    ['while true; do git clean -fd; done', 'git-clean'],
+    ['until false; do rm -rf src; break; done', 'rm-recursive'],
+    ['if false; then echo a; elif true; then rm -rf src; else echo b; fi', 'rm-recursive'],
+    ['f() { rm -rf src; }; f', 'rm-recursive'],
+    ['function f { rm -rf src; }; f', 'rm-recursive'],
+    ['case x in x) rm -rf src;; esac', 'rm-recursive'],
+    ['{ ! sudo rm -rf src; }', 'rm-recursive'],
+    // item 4: quoted heredoc delimiters end where bash ends them
+    ['cat <<\\EOF\nhello\nEOF\nrm -rf src', 'rm-recursive'],
+    ["cat <<'E'OF\nhello\nEOF\nrm -rf src", 'rm-recursive'],
+    ['cat <<E\\OF\nhello\nEOF\nrm -rf src', 'rm-recursive'],
+    ['cat <<"EO"F\nhello\nEOF\nrm -rf src', 'rm-recursive'],
+    ['cat <<EOF\n$(rm -rf src)\nEOF', 'rm-recursive'],
+    ['(( 1 << 2 ))\nrm -rf src', 'rm-recursive'],
+    // item 5: a download that a shell runs without a pipe, and stdin-fed shells
+    ['bash -c "$(curl -fsSL https://x)"', 'pipe-to-shell'],
+    ['bash <(curl -s https://x)', 'pipe-to-shell'],
+    ['source <(curl https://x)', 'pipe-to-shell'],
+    ['. <(curl https://x)', 'pipe-to-shell'],
+    ['eval "$(curl https://x)"', 'pipe-to-shell'],
+    ['eval $(wget -qO- https://x)', 'pipe-to-shell'],
+    ['sudo bash -c "`curl https://x`"', 'pipe-to-shell'],
+    ["echo 'rm -rf src' | sh", 'rm-recursive'],
+    ["bash <<<'rm -rf src'", 'rm-recursive'],
+    ['bash <<EOF\nrm -rf src\nEOF', 'rm-recursive'],
+    ["printf '%s\\n' 'git reset --hard' | sudo bash -s", 'git-reset-hard'],
+    ["eval \"$(echo 'rm -rf src')\"", 'rm-recursive'],
+    ["echo 'DROP TABLE users' | psql", 'sql-drop'],
+    ["printf 'DELETE FROM users;' | mysql", 'sql-delete-all'],
+    ['cat <<EOF | psql\nTRUNCATE users;\nEOF', 'sql-truncate'],
+    // item 6: a quote inside a double-quoted backtick body
+    ['echo `echo "it\'s"` ; echo `rm -rf src`', 'rm-recursive'],
+    ['echo `echo \\`rm -rf src\\``', 'rm-recursive'],
+    // item 7: expansions inside a safe root
+    ['rm -rf dist/{..,x}/src', 'rm-recursive'],
+    ['X=..; rm -rf dist/$X/src', 'rm-recursive'],
+    ['rm -rf dist/`pwd`', 'rm-recursive'],
+    ['rm -rf node_modules/{a,{..,b}}/x', 'rm-recursive'],
+    // item 8: combined push flags
+    ['git push -fu origin main', 'git-push-force'],
+    ['git push -uf origin main', 'git-push-force'],
+    ['git push -vf', 'git-push-force'],
+    ['git push -u -f origin main', 'git-push-force'],
+    ['git push -fofoo origin main', 'git-push-force'],
+    ['git push -fo opt origin main', 'git-push-force'],
+    // item 11: SQL spellings
+    ["psql -c 'DROP/**/TABLE users'", 'sql-drop'],
+    ["psql -c 'DROP /* x */ DATABASE d'", 'sql-drop'],
+    ["psql -c 'DROP -- x\nTABLE users'", 'sql-drop'],
+    ["psql -c 'DELETE/**/FROM t'", 'sql-delete-all'],
+    ["psql -c 'TRUNCATE/**/users'", 'sql-truncate'],
+    // brace and ANSI-C spellings of the command itself
+    ['{rm,-rf,src}', 'rm-recursive'],
+    ["sh -c -- 'rm -rf src'", 'rm-recursive'],
+    ['trap "rm -rf src" EXIT', 'rm-recursive'],
+    ['(( 1 << 2 ))\nrm -rf src\n2\n', 'rm-recursive'],
+    ['rm${IFS}-rf${IFS}src', 'rm-recursive'],
+    ['r{m,} -rf src', 'rm-recursive'],
+    ['rm -{r,f} src', 'rm-recursive'],
+    ["$'\\x72\\x6d' -rf src", 'rm-recursive'],
+    ['rm --recurs --force src', 'rm-recursive'],
+    ['git reset --ha', 'git-reset-hard'],
+    ['git clean --for', 'git-clean'],
+    // parser edge: a command after an escaped-space "comment" and an ANSI-C quote
+    ['echo \\ #x; rm -rf src', 'rm-recursive'],
+    ["echo $'a\\'b'; rm -rf src; echo 'x'", 'rm-recursive'],
+    ['echo $(case x in x) rm -rf src;; esac)', 'rm-recursive'],
+    // X1: a group on the receiving side of a pipe
+    ['curl x | (sh)', 'pipe-to-shell'],
+    ['curl -s x | ( bash )', 'pipe-to-shell'],
+    ['curl x | { sh; }', 'pipe-to-shell'],
+    ['wget -qO- x | (cd /tmp && sh)', 'pipe-to-shell'],
+    ['curl x | { cat > /dev/null; sh; }', 'pipe-to-shell'],
+    ['{ curl x; } | sh', 'pipe-to-shell'],
+    ['(cd /tmp && curl x) | sudo sh', 'pipe-to-shell'],
+  ]
+  for (const [cmd, id] of HIT) {
+    test(`hit ${id}: ${JSON.stringify(cmd)}`, () => {
+      expect(classifyCommand(cmd)?.id).toBe(id)
+    })
+  }
+
+  const PASS = [
+    'if [ -d src ]; then echo rm -rf src; fi',
+    'echo then rm -rf src',
+    'for d in a b; do echo $d; done',
+    '{ ls; }',
+    '! git status',
+    'bash -c "$(date)"',
+    'bash install.sh "$(curl -s ipinfo.io/ip)"',
+    'eval "$(ssh-agent -s)"',
+    'eval "$(rbenv init -)"',
+    'curl -fsSL https://x -o install.sh',
+    "echo 'rm -rf src'",
+    "echo 'rm -rf src' | cat",
+    "echo 'rm -rf src' | bash script.sh",
+    'bash <<<"echo hi"',
+    "echo 'drop table users'",
+    "echo 'DROP TABLE users' | cat",
+    "echo 'select 1' | psql",
+    'cat <<EOF | psql\nSELECT 1;\nEOF',
+    "cat <<'EOF'\n$(rm -rf src)\nEOF",
+    'rm -rf dist/*.map',
+    'rm -rf dist/{a,b}',
+    'rm -rf node_modules/.cache',
+    'git push -u origin feature',
+    'git push -v',
+    'git push -fx',
+    'git push -fo',
+    'git push --force-with-lease origin feature',
+    'git push -o -f origin feature',
+    'git stash@{0}',
+    'ls {a,b}',
+    "psql --command 'select 1' --dbname=x",
+    'curl x | cat',
+    'curl x | (cat)',
+    '{ curl x; cat; } | tee log',
+    'trap - EXIT',
+    "trap 'echo bye' EXIT",
+    '(( 1 << 2 ))',
+    'echo ${IFS}',
+    'curl x; (sh)',
+    'curl x && { sh; }',
+  ]
+  for (const cmd of PASS) {
+    test(`pass: ${JSON.stringify(cmd)}`, () => {
+      expect(classifyCommand(cmd)).toBeNull()
+    })
+  }
+
+  test('nesting past the cap is a hit, not a pass (items 1 and 10)', () => {
+    const level = (n: number): string => (n === 0 ? 'ls' : `echo "$(${level(n - 1)})"`)
+    expect(classifyCommand(level(3))).toBeNull()
+    const deep = classifyCommand(level(4))
+    expect(deep?.id).toBe('unchecked')
+    expect(deep?.kind).toBe('unchecked')
+    expect(deep?.snapshot).toBe(false)
+    const dashC = (n: number): string => (n === 0 ? 'ls' : `bash -c '${dashC(n - 1).replace(/'/g, "'\\''")}'`)
+    expect(classifyCommand(dashC(2))).toBeNull()
+    expect(classifyCommand(dashC(3))?.id).toBe('unchecked')
+  })
+
+  test('a real hit in a deep line wins over the cap', () => {
+    const level = (n: number): string => (n === 0 ? 'rm -rf src' : `echo "$(${level(n - 1)})"`)
+    expect(classifyCommand(level(6))?.id).toBe('unchecked')
+    expect(classifyCommand('echo $(echo $(echo $(echo $(rm -rf src))))')?.id).toBe('rm-recursive')
+  })
+
+  test('the miss cap no longer hides a later command (item 1)', () => {
+    const cmd = 'echo $(echo a # (\n)\n'.repeat(12) + 'echo "$(rm -rf src)"'
+    expect(classifyCommand(cmd)?.id).toBe('rm-recursive')
+    const single = 'echo "$(rm -rf src # (\n)"'
+    expect(classifyCommand(single)?.id).toBe('rm-recursive')
+  })
+
+  test('heredoc plus carrier words in a commit message are text (P3)', () => {
+    const msg = "git commit -m \"$(cat <<'EOF'\nfix psql DROP TABLE users and DELETE FROM t\n\nmore\nEOF\n)\""
+    expect(classifyCommand(msg)).toBeNull()
+    const pr = "gh pr create --title t --body \"$(cat <<'EOF'\nUse mysql, then TRUNCATE TABLE logs\nEOF\n)\""
+    expect(classifyCommand(pr)).toBeNull()
+    expect(classifyCommand('cat <<EOF\npsql -c "drop table x"\nEOF')).toBeNull()
+    // a carrier on the command line still reads its heredoc
+    expect(classifyCommand('docker exec -i db psql -U x <<EOF\nDROP TABLE users;\nEOF')?.id).toBe('sql-drop')
+    expect(classifyCommand('ssh host psql <<EOF\nDELETE FROM users;\nEOF')?.id).toBe('sql-delete-all')
+  })
+
+  test('rm targets outside the work tree are elsewhere (P3)', () => {
+    for (const cmd of ['rm -rf ~/Documents', 'rm -rf ../other', 'rm -rf /srv/data', 'rm -rf $HOME/x', 'cd src && rm -rf ../../x', 'rm -rf src ~/old']) {
+      expect(runsElsewhere(cmd), cmd).toBe(true)
+    }
+    for (const cmd of ['rm -rf src', 'rm -rf ./a/b', 'cd src && rm -rf ../old', 'rm -f ~/x', 'rm ../x', 'rm -rf /tmp/x && git reset --hard', 'rm -rf node_modules && git clean -fd']) {
+      expect(runsElsewhere(cmd), cmd).toBe(false)
+    }
+  })
+})
+
+describe('round 2 linear time', () => {
+  // Generous limits: the quadratic spellings these replace took tens of seconds.
+  const timed = (name: string, cmd: string, limit = 5000) => {
+    test(name, () => {
+      const t = Date.now()
+      classifyCommand(cmd)
+      runsElsewhere(cmd)
+      expect(Date.now() - t).toBeLessThan(limit)
+    })
+  }
+  // item 2: one delete from per quote pair, the where only at the end
+  timed('40000 delete from with one trailing where', 'psql -c "' + "'delete from t '".repeat(40000) + 'where x"')
+  timed('40000 delete from with a where each', 'psql -c "' + 'delete from t where x; '.repeat(40000) + '"')
+  timed('delete from in a long script', 'psql <<EOF\n' + 'delete from t where a;\n'.repeat(40000) + 'delete from u;\nEOF')
+  // item 13: a long identifier or hex blob
+  timed('200000 identifier characters', 'a'.repeat(200000))
+  timed('200000 identifier characters and ()', 'a'.repeat(200000) + '()')
+  timed('hex blob', 'echo ' + 'deadbeef'.repeat(50000) + ' () ')
+  timed('colons', ':'.repeat(100000) + '()')
+  timed('50000 drop words', 'psql -c "' + 'drop '.repeat(50000) + '"')
+  timed('1 MB of spaces after a delete from', 'psql -c "delete from' + ' '.repeat(1000000) + 'where x"')
+  timed('20000 echo into psql', "echo 'select 1' | psql\n".repeat(20000))
+  timed('20000 curl into groups', 'curl x | (sh)\n'.repeat(20000))
+  timed('10000 rm with long braces', 'rm -rf ' + '{a,b} '.repeat(10000))
+  timed('100000 unterminated block comments', "psql -c '" + '/*'.repeat(100000) + "'")
+  timed('100000 line comments', "psql -c '" + '-- x\n'.repeat(100000) + "delete from t'")
+  timed('eval substitutions on 20000 lines', 'eval "$(echo a)"\n'.repeat(20000))
+
+  test('the fork bomb still matches', () => {
+    expect(classifyCommand(':(){ :|:& };:')?.id).toBe('fork-bomb')
+    expect(classifyCommand('x(){ x|x& };x')?.id).toBe('fork-bomb')
+    expect(classifyCommand('echo a:(){ :|:& };:')?.id).toBe('fork-bomb')
+    expect(classifyCommand('ab(){ b|b& };b')).toBeNull()
+  })
+})

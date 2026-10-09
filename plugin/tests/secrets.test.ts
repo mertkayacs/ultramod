@@ -391,3 +391,30 @@ describe('secrets sanitizes what a later hook sends to the model (C11)', () => {
     expect(answer).toEqual({ deny: 'no [redacted:github]' })
   })
 })
+
+describe('secrets sees through reserved words and groups (round 2, item 3)', () => {
+  const denied = [
+    'if true; then cat .env; fi',
+    '{ cat .env; }',
+    'for f in a; do cat .env; done',
+    'while true; do cat .env; break; done',
+    '! cat .env',
+    'echo a && { cat .env; }',
+    'f() { cat .env; }; f',
+    'case x in x) cat .env;; esac',
+    'cat <<\\EOF\nx\nEOF\ncat .env',
+    'echo `echo "it\'s"`; cat .env',
+  ]
+  for (const command of denied) {
+    test(`denies ${JSON.stringify(command)}`, async () => {
+      expect(await call(world(), bash(command))).toMatchObject({ deny: expect.stringContaining('.env') })
+    })
+  }
+
+  test('look-alikes with the same keywords pass', async () => {
+    const w = world()
+    for (const command of ['if true; then cat README.md; fi', '{ cat .env.example; }', 'echo then cat .env', 'for f in a; do ls; done']) {
+      expect(await call(w, bash(command))).toMatchObject({ result: 'ran' })
+    }
+  })
+})

@@ -361,7 +361,7 @@ test('a deny beneath us is never turned into an allow', async ($, on) => {
 test('the approval dialog shows the full command, not a cut', async ($, on) => {
   const { state } = world(on)
   state.answers.push('Refuse')
-  const long = `git reset --hard && echo ${'x'.repeat(200)} && rm -rf ~/precious`
+  const long = `git reset --hard && echo ${'x'.repeat(200)} && rm -rf precious`
   await $.tool.call(bash(long))
   expect(state.asks[0]?.question).toBe(`Run \`${long}\`? It discards uncommitted changes. A work tree snapshot is saved first, so /ultra undo can restore it.`)
 })
