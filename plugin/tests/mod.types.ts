@@ -1,42 +1,33 @@
 import type { Args } from 'claude-code'
-import type { ModEvent, ModHandler, UltraMod } from '../hooks/core/mod'
+import type { UltraMod } from '../hooks/core/mod'
 
-// Compile-only checks. The dispatcher fails closed on four events only, so a
-// handler flagged gating on any other event would fail open without a word.
+// Compile-only checks. A mod answers with plain values; the hooks in
+// register.tsx write every engine answer, so a mod has no way to hand back an
+// allow, a permission verdict or the engine's own next.
 export function checkModTypes() {
-  const run: ModHandler<'tool.call'>['run'] = (_, e, next) => next(e)
-  const gates: UltraMod = {
+  const good: UltraMod = {
     id: 'guard',
-    hooks: {
-      'tool.call': [{ gating: true, run }],
-      'tool.check': [{ gating: true, run: (_, e, next) => next(e) }],
-      'prompt.submit': [{ gating: true, run: (_, e, next) => next(e) }],
-      'session.append': [{ gating: true, run: (_, e, next) => next(e) }],
-    },
-  }
-  const observers: UltraMod = {
-    id: 'receipts',
-    hooks: {
-      'turn.complete': [{ run: (_, e, next) => next(e) }],
-      'ui.render': [{ run: (_, e, next) => next(e) }],
-    },
+    check: { when: e => e.tool === 'Bash', run: () => 'refused' },
+    watch: { run: () => result => result },
+    append: { run: () => null },
+    turnComplete: { run: () => 'a line' },
   }
   const bad: UltraMod[] = [
-    // @ts-expect-error A turn.complete handler cannot gate: the dispatcher forwards after its failure.
-    { id: 'receipts', hooks: { 'turn.complete': [{ gating: true, run: (_, e, next) => next(e) }] } },
-    // @ts-expect-error No other event gates either.
-    { id: 'compact', hooks: { 'classic.SessionStart': [{ gating: true, run: (_, e, next) => next(e) }] } },
-    // @ts-expect-error Not even a gating: false on an event that has no gate.
-    { id: 'pins', hooks: { 'prompt.compose': [{ gating: false, run: (_, e, next) => next(e) }] } },
+    // @ts-expect-error A check answers with refusal text, not a decision.
+    { id: 'guard', check: { run: () => ({ decision: 'allow' }) } },
+    // @ts-expect-error A check cannot hand back a tool result in place of the call.
+    { id: 'secrets', check: { run: () => ({ result: 'faked' }) } },
+    // @ts-expect-error There is no permission step.
+    { id: 'tests', permission: { run: () => null } },
+    // @ts-expect-error A step gets the facade and the event, no next.
+    { id: 'tidy', check: { run: (_api, _e, next: () => void) => { next(); return null } } },
   ]
-  // The flag stays readable on a handler of any event, so the dispatcher can test it.
-  const flagOf = <E extends ModEvent>(handler: ModHandler<E>) => Boolean(handler.gating)
 
   // turn.start carries no agentId (a subagent's run raises no turn.start), so
-  // the receipts hook needs no subagent filter there; an engine that adds one
+  // the receipts step needs no subagent filter there; an engine that adds one
   // turns this expectation red.
   // @ts-expect-error turn.start has no agentId.
   type SubagentTurnStart = Args<'turn.start'>['agentId']
 
-  return { gates, observers, bad, flagOf }
+  return { good, bad }
 }

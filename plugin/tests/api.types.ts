@@ -8,7 +8,6 @@ export function checkApiTypes(api: UltraApi, terminal: RenderInput<'AbovePrompt'
   const terminalElements: Elements['terminal'] = api.ui.resolve(terminal)
   const desktopElements: Elements['desktop'] = api.ui.resolve(desktop)
   const text: Promise<string> = api.fs.read('README.md')
-  const bytes: Promise<{ base64: string }> = api.fs.read('assets/chime.ogg', { as: 'bytes' })
   const set: Promise<StateRead<UltraSet | null>> = api.state.get({ plugin: 'ultramod', key: 'set' })
   const turn: Promise<StateRead<UltraTurn>> = api.state.get({ plugin: 'ultramod', key: 'turn' })
   const receipts: Promise<StateRead<UltraReceipt[]>> = api.state.get({ plugin: 'ultramod', key: 'receipts' })
@@ -22,7 +21,9 @@ export function checkApiTypes(api: UltraApi, terminal: RenderInput<'AbovePrompt'
   api.env.get('HOME')
   api.env.get('USERPROFILE')
   api.env.get('WSL_DISTRO_NAME')
+  // @ts-expect-error TERM_PROGRAM is not read: no mod needs it.
   api.env.get('TERM_PROGRAM')
+  const pins: Promise<void> = api.fs.writePins('/work', '- rule\n')
 
   // @ts-expect-error Network access is absent from the facade.
   api.http.fetch('https://example.com')
@@ -34,11 +35,13 @@ export function checkApiTypes(api: UltraApi, terminal: RenderInput<'AbovePrompt'
   api.ui.copy({ text: 'unused' })
   // @ts-expect-error Process streaming is absent from the facade.
   api.process.spawn({ argv: ['pwd'] })
+  // @ts-expect-error Writes to any path but the pins file are absent from the facade.
+  api.fs.write('package.json', '{}')
   // @ts-expect-error File listing is absent from the facade.
   api.fs.list('.')
   // @ts-expect-error Session appends are absent from the facade.
   api.session.append({ message: { type: 'user', content: [] } })
-  // @ts-expect-error Only the five declared environment names are exposed.
+  // @ts-expect-error Only the four declared environment names are exposed.
   api.env.get('PATH')
   // @ts-expect-error Environment mutation is absent from the facade.
   api.env.set('HOME', '/tmp')
@@ -48,8 +51,8 @@ export function checkApiTypes(api: UltraApi, terminal: RenderInput<'AbovePrompt'
   api.state.set({ plugin: 'ultramod', key: 'turn' }, 'invalid')
   // @ts-expect-error Values from another state key do not fit the allowlist.
   api.state.set({ plugin: 'ultramod', key: 'allow' }, { warned: false, offered: false })
-  // @ts-expect-error Bytes reads return base64 records rather than strings.
-  const wrongBytes: Promise<string> = api.fs.read('assets/chime.ogg', { as: 'bytes' })
+  // @ts-expect-error The facade reads text only.
+  const wrongBytes = api.fs.read('assets/chime.ogg', { as: 'bytes' })
 
-  return { terminalElements, desktopElements, text, bytes, set, turn, receipts, allow, compact, current, updated, wrongBytes }
+  return { pins, terminalElements, desktopElements, text, set, turn, receipts, allow, compact, current, updated, wrongBytes }
 }

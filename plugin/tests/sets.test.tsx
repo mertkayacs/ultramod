@@ -5,6 +5,7 @@ import type { UltraSet } from '../types/index'
 import { createSets, projectKey, resolveSet, setLabel, sets } from '../hooks/core/sets'
 import { runCommand } from '../hooks/core/commands'
 import type { UltraMod } from '../hooks/core/mod'
+import type { UltraApi } from '../hooks/core/api'
 
 const command = (args: string) => ({ command: 'ultra', args, origin: { kind: 'composer' } as const, presentation: { isFullscreen: false, columns: 100 } })
 const PANE: RenderPropsOf['Pane'] = { title: 'Ultra Mod', isFocused: true, bodyColumns: 100, placement: 'inline', scroll: { offset: 0, bodyRows: 20 }, view: {} }
@@ -230,7 +231,7 @@ test('mod subcommands route in registry order, defer shared commands and respect
   ]
   const engine = createSets({ set: 'flow' })
   engine.enabled = async (_, id) => id !== 'tests'
-  on('command.run', { command: 'routing-probe' }, ($, e) => runCommand($, e.args, engine, mods, async () => {}))
+  on('command.run', { command: 'routing-probe' }, ($, e) => runCommand($ as unknown as UltraApi, e.args, engine, mods, async () => {}))
   const probe = (args: string) => ({ ...command(args), command: 'routing-probe' })
   expect((await $.command.run(probe('allow example.txt'))).text).toBe('allowed example.txt')
   expect(seen).toEqual(['guard'])

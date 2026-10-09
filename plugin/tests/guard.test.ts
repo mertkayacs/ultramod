@@ -56,7 +56,7 @@ function world(on: On, set?: UltraSet) {
       if (a1 === 'ls-files') return ok(argv.includes('--others') ? '' : state.nowFiles)
       if (a1 === 'restore' || a1 === 'read-tree' || a1 === 'checkout-index') return ok('')
     }
-    if (a0 === 'rm' || a0 === 'cmd') return ok('')
+    if (a0 === 'rm' || a0 === 'powershell.exe') return ok('')
     return bad()
   })
   on('tool.call', ($, e) => {
@@ -449,14 +449,19 @@ test('a snapshot commit message carries the redacted command', async ($, on) => 
   expect(commit.join(' ')).not.toContain(TOKEN)
 })
 
-// Round 2: git reports the index path with forward slashes, which cmd's del reads as a switch.
-test('on Windows the temporary index is removed with a native path', async ($, on) => {
+// Round 2: git reports the index path with forward slashes; Windows gets a
+// native path. The file goes through the script the plugin ships, never
+// through an inline cmd or PowerShell command.
+test('on Windows the temporary index is removed by the shipped script with a native path', async ($, on) => {
   const { state } = world(on)
   on('env.get', () => ({ value: 'Windows_NT' }))
   state.answers.push('Run it')
   await $.tool.call(bash('git reset --hard'))
-  expect(argvOnly(state.runs)).toContainEqual(['cmd', '/c', 'del', '/f', '/q', '.git\\ultramod-index'])
-  expect(argvOnly(state.runs).some(argv => argv[0] === 'rm')).toBe(false)
+  const removal = argvOnly(state.runs).find(argv => argv.includes('-Path'))
+  expect(removal?.slice(0, 5)).toEqual(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File'])
+  expect(String(removal?.[5])).toMatch(/[\\/]scripts[\\/]remove-index\.ps1$/)
+  expect(removal?.slice(6)).toEqual(['-Path', '.git\\ultramod-index'])
+  expect(argvOnly(state.runs).some(argv => argv[0] === 'rm' || argv[0] === 'cmd')).toBe(false)
 })
 
 test('/ultra undo names the paths that block a restore and writes nothing', async ($, on) => {

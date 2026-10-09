@@ -1,8 +1,8 @@
 import { expect, test, describe } from 'claude-code/testing'
 import type { Args, EventResult, Frozen } from 'claude-code'
 import type { UltraApi } from '../hooks/core/api'
-import { createDispatcher } from '../hooks/core/dispatcher'
-import type { ModEvent, ModNext } from '../hooks/core/mod'
+import { createDriver } from './drive'
+import type { Beneath, DriveEvent } from './drive'
 import { resolveSet } from '../hooks/core/sets'
 import { secrets } from '../hooks/mods/secrets'
 
@@ -66,19 +66,17 @@ function world(init: { set?: unknown; allow?: unknown } = {}): World {
   return w
 }
 
-function bottom<E extends ModEvent>(event: E, answer: EventResult<E>, calls: { count: number }): ModNext<E> {
-  const next = Object.assign(async (_e: Frozen<Args<E>> | Args<E>) => {
+function bottom<E extends DriveEvent>(_event: E, answer: EventResult<E>, calls: { count: number }): Beneath<E> {
+  return async () => {
     calls.count += 1
     return answer
-  }, { event, signal: undefined })
-  Object.defineProperty(next, 'called', { get: () => calls.count > 0 })
-  return next as unknown as ModNext<E>
+  }
 }
 
 function call(w: World, e: Args<'tool.call'>): Promise<EventResult<'tool.call'>> {
-  const dispatcher = createDispatcher([secrets], enabled)
+  const driver = createDriver([secrets], enabled)
   const calls = { count: 0 }
-  return dispatcher.dispatch(w.$, 'tool.call', e, bottom('tool.call', { result: 'ran', text: 'ran', isReadOnly: true }, calls))
+  return driver.dispatch(w.$, 'tool.call', e, bottom('tool.call', { result: 'ran', text: 'ran', isReadOnly: true }, calls))
 }
 
 const read = (file_path: string) => ({ tool: 'Read', file_path }) as unknown as Args<'tool.call'>
@@ -217,12 +215,12 @@ describe('secrets redacts stored rows', () => {
 
   test('a token in a tool result is replaced and logged', async () => {
     const w = world()
-    const dispatcher = createDispatcher([secrets], enabled)
+    const driver = createDriver([secrets], enabled)
     const calls = { count: 0 }
     // Split so secret scanners reading this repo do not flag the fake token.
     const e = appendMessage('token ghp' + '_AbCdEf0123456789AbCdEf0123456789AbCdEf0123 end')
     const echo = echoNext(calls)
-    const answer = (await dispatcher.dispatch(w.$, 'session.append', e, echo)) as { message: typeof e.message }
+    const answer = (await driver.dispatch(w.$, 'session.append', e, echo)) as { message: typeof e.message }
     const block = answer.message.content[0] as unknown as { content: { type: string; text: string }[] }
     expect(block.content[0]?.text).toBe('token [redacted:github] end')
     expect(w.logs).toEqual(['secrets: redacted 1 github'])
@@ -231,12 +229,12 @@ describe('secrets redacts stored rows', () => {
 
   test('the person prompt and the reply are stored as typed', async () => {
     const w = world()
-    const dispatcher = createDispatcher([secrets], enabled)
+    const driver = createDriver([secrets], enabled)
     const calls = { count: 0 }
     const text = 'token ghp' + '_AbCdEf0123456789AbCdEf0123456789AbCdEf0123 end'
     for (const door of ['prompt', 'response'] as const) {
       const e = appendMessage(text, door)
-      const answer = await dispatcher.dispatch(w.$, 'session.append', e, echoNext(calls))
+      const answer = await driver.dispatch(w.$, 'session.append', e, echoNext(calls))
       expect(answer).toEqual({ message: e.message, uuid: 'row-1' })
     }
     expect(w.logs).toEqual([])
@@ -245,10 +243,10 @@ describe('secrets redacts stored rows', () => {
 
   test('a tool message row is redacted like a tool result', async () => {
     const w = world()
-    const dispatcher = createDispatcher([secrets], enabled)
+    const driver = createDriver([secrets], enabled)
     const calls = { count: 0 }
     const e = appendMessage('token ghp' + '_AbCdEf0123456789AbCdEf0123456789AbCdEf0123 end', 'tool-message')
-    const answer = (await dispatcher.dispatch(w.$, 'session.append', e, echoNext(calls))) as { message: typeof e.message }
+    const answer = (await driver.dispatch(w.$, 'session.append', e, echoNext(calls))) as { message: typeof e.message }
     const block = answer.message.content[0] as unknown as { content: { type: string; text: string }[] }
     expect(block.content[0]?.text).toBe('token [redacted:github] end')
     expect(w.logs).toEqual(['secrets: redacted 1 github'])
@@ -256,40 +254,38 @@ describe('secrets redacts stored rows', () => {
 
   test('clean rows are unchanged with no log', async () => {
     const w = world()
-    const dispatcher = createDispatcher([secrets], enabled)
+    const driver = createDriver([secrets], enabled)
     const calls = { count: 0 }
     const e = appendMessage('ordinary output with no secrets')
-    const answer = await dispatcher.dispatch(w.$, 'session.append', e, bottom('session.append', { message: e.message, uuid: e.uuid }, calls))
+    const answer = await driver.dispatch(w.$, 'session.append', e, bottom('session.append', { message: e.message, uuid: e.uuid }, calls))
     expect(answer).toEqual({ message: e.message, uuid: 'row-1' })
     expect(w.logs).toEqual([])
   })
 
-  function echoNext(calls: { count: number }): ModNext<'session.append'> {
-    const next = Object.assign(async (input: Frozen<Args<'session.append'>> | Args<'session.append'>) => {
+  function echoNext(calls: { count: number }): Beneath<'session.append'> {
+    return async input => {
       calls.count += 1
       return { message: input.message, uuid: input.uuid } as EventResult<'session.append'>
-    }, { event: 'session.append' as const, signal: undefined })
-    Object.defineProperty(next, 'called', { get: () => calls.count > 0 })
-    return next as unknown as ModNext<'session.append'>
+    }
   }
 
   test('a failed log line keeps the row', async () => {
     const w = world()
     ;(w.$ as unknown as { ui: { log: (text: string) => void } }).ui.log = () => { throw new Error('log failed') }
-    const dispatcher = createDispatcher([secrets], enabled)
+    const driver = createDriver([secrets], enabled)
     const calls = { count: 0 }
     const e = appendMessage('key sk-' + 'ant-api03-AbCdEf0123456789AbCdEf0123456789AbCdEf01')
-    const answer = (await dispatcher.dispatch(w.$, 'session.append', e, echoNext(calls))) as { message: typeof e.message }
+    const answer = (await driver.dispatch(w.$, 'session.append', e, echoNext(calls))) as { message: typeof e.message }
     const block = answer.message.content[0] as unknown as { content: { type: string; text: string }[] }
     expect(block.content[0]?.text).toContain('[redacted:anthropic]')
     expect(calls.count).toBe(1)
   })
 
   test('a redactor failure keeps the original row (fail open)', async () => {
-    const dispatcher = createDispatcher([{ id: 'secrets', hooks: { 'session.append': [{ run: () => { throw new Error('redactor crashed') } }] } }], enabled)
+    const driver = createDriver([{ id: 'secrets', append: { run: () => { throw new Error('redactor crashed') } } }], enabled)
     const calls = { count: 0 }
     const e = appendMessage('original')
-    const answer = await dispatcher.dispatch(world().$, 'session.append', e, bottom('session.append', { message: e.message, uuid: e.uuid }, calls))
+    const answer = await driver.dispatch(world().$, 'session.append', e, bottom('session.append', { message: e.message, uuid: e.uuid }, calls))
     expect(answer).toEqual({ message: e.message, uuid: 'row-1' })
     expect(calls.count).toBe(1)
   })
@@ -351,9 +347,9 @@ describe('secrets sanitizes what a later hook sends to the model (C11)', () => {
   const token = 'ghp' + '_AbCdEf0123456789AbCdEf0123456789AbCdEf0123'
 
   function downstream(w: World, e: Args<'tool.call'>, answer: EventResult<'tool.call'>): Promise<EventResult<'tool.call'>> {
-    const dispatcher = createDispatcher([secrets], enabled)
+    const driver = createDriver([secrets], enabled)
     const calls = { count: 0 }
-    return dispatcher.dispatch(w.$, 'tool.call', e, bottom('tool.call', answer, calls))
+    return driver.dispatch(w.$, 'tool.call', e, bottom('tool.call', answer, calls))
   }
 
   test('a downstream deny is redacted', async () => {

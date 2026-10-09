@@ -1,8 +1,8 @@
 import { expect, test, describe } from 'claude-code/testing'
 import type { Args, EventResult, Frozen } from 'claude-code'
 import type { UltraApi } from '../hooks/core/api'
-import { createDispatcher } from '../hooks/core/dispatcher'
-import type { ModEvent, ModNext } from '../hooks/core/mod'
+import { createDriver } from './drive'
+import type { Beneath, DriveEvent } from './drive'
 import { resolveSet } from '../hooks/core/sets'
 import { needsYou } from '../hooks/core/notifier'
 import { notify, resetNotify } from '../hooks/mods/notify'
@@ -99,13 +99,11 @@ function world(init: { env?: Record<string, string | undefined>; set?: unknown }
   return w
 }
 
-function bottom<E extends ModEvent>(event: E, answer: EventResult<E>, calls: { count: number }): ModNext<E> {
-  const next = Object.assign(async (_e: Frozen<Args<E>> | Args<E>) => {
+function bottom<E extends DriveEvent>(_event: E, answer: EventResult<E>, calls: { count: number }): Beneath<E> {
+  return async () => {
     calls.count += 1
     return answer
-  }, { event, signal: undefined })
-  Object.defineProperty(next, 'called', { get: () => calls.count > 0 })
-  return next as unknown as ModNext<E>
+  }
 }
 
 // Resolves after `count` microtask turns, no timers needed in this sandbox.
@@ -121,9 +119,9 @@ async function settle(): Promise<void> {
 }
 
 async function completeTurn(w: World, durationMs: number, extra: Partial<Args<'turn.complete'>> = {}): Promise<EventResult<'turn.complete'>> {
-  const dispatcher = createDispatcher([notify], enabled)
+  const driver = createDriver([notify], enabled)
   const calls = { count: 0 }
-  const result = await dispatcher.dispatch(w.$, 'turn.complete', {
+  const result = await driver.dispatch(w.$, 'turn.complete', {
     turnId: 't1', answer: 'done', durationMs, isAborted: false, reason: 'answer', ...extra,
   } as Args<'turn.complete'>, bottom('turn.complete', { text: '' }, calls))
   await settle()
@@ -131,9 +129,9 @@ async function completeTurn(w: World, durationMs: number, extra: Partial<Args<'t
 }
 
 async function notification(w: World, message: string, notificationType = 'permission_prompt'): Promise<EventResult<'classic.Notification'>> {
-  const dispatcher = createDispatcher([notify], enabled)
+  const driver = createDriver([notify], enabled)
   const calls = { count: 0 }
-  const result = await dispatcher.dispatch(w.$, 'classic.Notification', {
+  const result = await driver.dispatch(w.$, 'classic.Notification', {
     hook_event_name: 'Notification', message, notification_type: notificationType, session_id: 's1', transcript_path: '', cwd: '/work/project',
   } as Args<'classic.Notification'>, bottom('classic.Notification', {} as EventResult<'classic.Notification'>, calls))
   await settle()
@@ -295,9 +293,9 @@ describe('notify fallbacks and rate limiting', () => {
   test('the turn returns before the notifier runs', async () => {
     const w = world()
     w.blocked = true
-    const dispatcher = createDispatcher([notify], enabled)
+    const driver = createDriver([notify], enabled)
     const calls = { count: 0 }
-    const turn = dispatcher.dispatch(w.$, 'turn.complete', {
+    const turn = driver.dispatch(w.$, 'turn.complete', {
       turnId: 't1', answer: 'done', durationMs: 134_000, isAborted: false, reason: 'answer',
     } as Args<'turn.complete'>, bottom('turn.complete', { text: '' }, calls))
     const winner = await Promise.race([
