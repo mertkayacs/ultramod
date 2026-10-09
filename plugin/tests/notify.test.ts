@@ -209,6 +209,13 @@ describe('notify sends platform notifications with exact argv', () => {
     expect(psBody(argv)).toBe('project finished in 2m14s')
   })
 
+  test('wsl converts the script path even when OS=Windows_NT is carried over', async () => {
+    const w = world({ env: { OS: 'Windows_NT', WSL_DISTRO_NAME: 'Ubuntu' } })
+    await completeTurn(w, 134_000)
+    expect(w.argvs.filter(argv => argv[0] === 'wslpath')).toEqual([['wslpath', '-w', '/plugins/ultramod/scripts/notify.ps1']])
+    expect((notifierArgv(w)[0] ?? [])[5]).toBe('\\\\wsl.localhost\\Ubuntu\\plugins\\ultramod\\scripts\\notify.ps1')
+  })
+
   test('wsl falls back to a toast when the path cannot be converted', async () => {
     const w = world({ env: { OS: 'Linux', WSL_DISTRO_NAME: 'Ubuntu' } })
     w.exits.wslpath = 1
