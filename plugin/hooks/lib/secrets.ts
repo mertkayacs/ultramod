@@ -1,6 +1,6 @@
 // Secret detection from SPEC 4.4: paths, bash reads, env dumps and redaction.
 // Plain TypeScript, no imports.
-import { splitCommand, commandTokens, baseName, tokens } from './shell'
+import { splitCommand, commandTokens, commandArgv, baseName, tokens } from './shell'
 
 const SAMPLE_WORDS = ['example', 'sample', 'template', 'dist']
 
@@ -60,6 +60,186 @@ export function isSecretPath(path: string, allow?: string[]): boolean {
     return true
   }
   return false
+}
+
+// Glob words. A shell expands cat .env* before cat runs, so the word is tested
+// against canonical secret names instead of being read as a literal path.
+type GlobItem = { k: 'lit'; c: string } | { k: 'any' } | { k: 'star' } | { k: 'set'; neg: boolean; body: string }
+
+// Longer sets are read as "any character": a bound on work, wrong only toward
+// flagging.
+const MAX_SET = 64
+
+function hasGlobChar(s: string): boolean {
+  return s.indexOf('*') !== -1 || s.indexOf('?') !== -1 || s.indexOf('[') !== -1
+}
+
+// One pass. A [ with no ] after it is a plain character; a set is read up to
+// the first ] and scanning resumes after it, so no text is read twice.
+function parseGlob(p: string): GlobItem[] {
+  const items: GlobItem[] = []
+  const lastClose = p.lastIndexOf(']')
+  let i = 0
+  while (i < p.length) {
+    const c = p.charAt(i)
+    if (c === '*') {
+      if (items[items.length - 1]?.k !== 'star') items.push({ k: 'star' })
+      i++
+    } else if (c === '?') {
+      items.push({ k: 'any' })
+      i++
+    } else if (c === '[' && lastClose > i) {
+      let j = i + 1
+      let neg = false
+      if (p.charAt(j) === '!' || p.charAt(j) === '^') {
+        neg = true
+        j++
+      }
+      const bodyStart = j
+      if (p.charAt(j) === ']') j++
+      while (j < p.length && p.charAt(j) !== ']') j++
+      if (j >= p.length) {
+        items.push({ k: 'lit', c })
+        i++
+        continue
+      }
+      const body = p.slice(bodyStart, j)
+      items.push(body.length > MAX_SET ? { k: 'any' } : { k: 'set', neg, body })
+      i = j + 1
+    } else {
+      items.push({ k: 'lit', c })
+      i++
+    }
+  }
+  return items
+}
+
+function inSet(body: string, ch: string): boolean {
+  for (let i = 0; i < body.length; i++) {
+    if (body.charAt(i + 1) === '-' && i + 2 < body.length) {
+      if (ch >= body.charAt(i) && ch <= body.charAt(i + 2)) return true
+      i += 2
+    } else if (body.charAt(i) === ch) {
+      return true
+    }
+  }
+  return false
+}
+
+function itemTakes(it: GlobItem, ch: string): boolean {
+  if (it.k === 'lit') return it.c === ch
+  if (it.k === 'any') return true
+  if (it.k === 'set') return inSet(it.body, ch) !== it.neg
+  return false
+}
+
+// Two-pointer wildcard match with one backtrack point: no regex, no
+// exponential case. A leading * or ? never takes a leading dot, as in a shell.
+function globMatches(items: GlobItem[], name: string): boolean {
+  const first = items[0]
+  if (name.startsWith('.') && first !== undefined && (first.k === 'star' || first.k === 'any')) return false
+  let i = 0
+  let t = 0
+  let star = -1
+  let mark = 0
+  while (t < name.length) {
+    const it = items[i]
+    if (it !== undefined && it.k === 'star') {
+      star = i++
+      mark = t
+    } else if (it !== undefined && itemTakes(it, name.charAt(t))) {
+      i++
+      t++
+    } else if (star !== -1) {
+      i = star + 1
+      t = ++mark
+    } else {
+      return false
+    }
+  }
+  while (items[i]?.k === 'star') i++
+  return i === items.length
+}
+
+// Names a glob can stand for. Files that need no folder to be secret:
+const GLOB_PLAIN: string[] = ['.npmrc', '.pypirc', '.netrc', '.git-credentials', 'id_rsa', 'id_ed25519', 'id_ecdsa', 'id_dsa']
+for (const suffix of ['', '.local', '.production', '.development', '.staging', '.test', '.prod', '.dev', '.stage', '.ci']) {
+  GLOB_PLAIN.push('.env' + suffix)
+}
+for (const letter of 'abcdefghijklmnopqrstuvwxyz') GLOB_PLAIN.push('.env.' + letter)
+for (const stem of ['a', 'key', 'cert', 'server', 'private', 'client', 'id', 'tls', 'ssl', 'ca', 'privkey', 'fullchain', 'prod']) {
+  for (const ext of ['pem', 'key', 'p12', 'pfx', 'jks', 'keystore']) GLOB_PLAIN.push(stem + '.' + ext)
+}
+// Name-contains rules. Too broad for *.json, so they apply only to a glob
+// that spells cred or secret.
+const GLOB_BROAD = ['credentials.json', 'service-credentials.json', 'google-credentials.json', 'secret.json', 'secrets.json', 'client_secret.json',
+  'secret.yml', 'secret.yaml', 'secrets.yml', 'secrets.yaml']
+// Files that are secret only inside .aws, .docker or .kube.
+const GLOB_DIRS = ['.aws', '.docker', '.kube']
+const GLOB_IN_DIR = ['credentials', 'config', 'config.json', 'credentials.bak', 'credentials.backup', 'credentials.old', 'config.bak', 'config.backup', 'config.old',
+  'config.json.bak', 'config.json.backup', 'config.json.old']
+
+/**
+ * True when the glob word can expand to a secret file. Matched against the
+ * canonical names above. A bare * or *.* matches nothing: the glob needs a
+ * literal letter, a leading dot, or a secret folder (.ssh, .aws, .docker,
+ * .kube) in front of it.
+ */
+function secretGlob(token: string, allow: string[] | undefined): boolean {
+  if (!hasGlobChar(token)) return false
+  const norm = token.replace(/\\/g, '/').toLowerCase()
+  const slash = norm.lastIndexOf('/')
+  const dir = slash === -1 ? '' : norm.slice(0, slash)
+  const base = norm.slice(slash + 1)
+  if (base === '') return false
+  const parent = dir.slice(dir.lastIndexOf('/') + 1)
+  const dirFree = dir !== '' && !hasGlobChar(dir)
+  const items = parseGlob(base)
+  const named = (name: string) => (dirFree ? dir + '/' + name : name)
+  if (hasGlobChar(base)) {
+    let literal = items[0]?.k === 'lit' && items[0].c === '.'
+    for (const it of items) if (it.k === 'lit' && it.c !== '.') literal = true
+    if (parent === '.ssh') literal = true
+    if (literal) {
+      for (const name of GLOB_PLAIN) {
+        if (globMatches(items, name) && isSecretPath(named(name), allow)) return true
+      }
+      if (/cred|secret/.test(base)) {
+        for (const name of GLOB_BROAD) {
+          if (globMatches(items, name) && isSecretPath(named(name), allow)) return true
+        }
+      }
+    }
+  }
+  if (parent !== '') {
+    const up = parseGlob(parent)
+    for (const d of GLOB_DIRS) {
+      if (!globMatches(up, d)) continue
+      for (const name of GLOB_IN_DIR) {
+        if (globMatches(items, name) && isSecretPath(dirFree ? dir + '/' + name : d + '/' + name, allow)) return true
+      }
+    }
+  }
+  return false
+}
+
+// Targets of input redirects (< file, 0< file). A here-document or
+// here-string is text, not a file.
+function inputTargets(raw: string[]): string[] {
+  const out: string[] = []
+  for (let i = 0; i + 1 < raw.length; i++) {
+    const w = raw[i] ?? ''
+    if (/^\d*<$/.test(w)) out.push(raw[i + 1] ?? '')
+  }
+  return out
+}
+
+// A word that closes a block, so a redirect after it feeds the whole block:
+// while read l; do echo $l; done < .env
+const BLOCK_ENDS = new Set(['done', 'fi', 'esac', '}'])
+
+function secretWord(w: string, allow: string[] | undefined): boolean {
+  return isSecretPath(w, allow) === true || secretGlob(w, allow)
 }
 
 const READERS = [
@@ -199,7 +379,16 @@ function stdoutRedirected(words: string[]): boolean {
  */
 export function bashReadsSecret(cmd: string, allow?: string[]): string | null {
   for (const simple of splitCommand(cmd)) {
-    const words = commandTokens(simple)
+    const raw = tokens(simple)
+    const inputs = inputTargets(raw)
+    if (BLOCK_ENDS.has(raw[0] ?? '')) {
+      for (const t of inputs) if (secretWord(t, allow)) return t
+    }
+    let words = commandTokens(simple)
+    // A redirect in front of the command (< .env cat) hides it from the word
+    // walk: take the words the program receives instead.
+    const received = commandArgv(simple)
+    if (received.length > 0 && baseName(words[0] ?? '') !== baseName(received[0] ?? '')) words = received
     if (words.length === 0) continue
     const head = baseName(words[0] ?? '')
     const args = words.slice(1)
@@ -214,13 +403,14 @@ export function bashReadsSecret(cmd: string, allow?: string[]): string | null {
     }
     const isRunner = RUNNERS.has(head)
     if (isRunner === false && READERS.indexOf(head) === -1) continue
-    if (stdoutRedirected(words)) continue
+    if (stdoutRedirected(raw)) continue
     if (head === 'sed' && args.some((a) => a === '-i' || a === '--in-place' || a.startsWith('-i'))) continue
     if (isRunner) {
       // Loading the file is no read, but a script that can print runs after it.
       const loaded = secretEnvFile(args, allow)
       if (loaded !== null && scriptCanPrint(head, args)) return loaded
     }
+    for (const t of inputs) if (secretWord(t, allow)) return t
     for (let i = 0; i < args.length; i++) {
       const a = args[i] ?? ''
       if (a === '2>' || a === '2>>') {
@@ -244,7 +434,7 @@ export function bashReadsSecret(cmd: string, allow?: string[]): string | null {
         }
         continue
       }
-      if (isSecretPath(a, allow) === true) return a
+      if (secretWord(a, allow)) return a
     }
   }
   return null
@@ -343,6 +533,37 @@ const PRIVATE_END = '-----END '
 const PRIVATE_KEY_TAIL = 'PRIVATE KEY-----'
 const REDACTED_KEY = '[redacted:private-key]'
 
+// A key body is base64 lines. A line of 16 characters or more, or one with a
+// digit or + / =, counts; a plain word such as "next" does not.
+const KEY_BODY = /^[A-Za-z0-9+/=]+$/
+const KEY_HEADER = /^(?:Proc-Type|DEK-Info):/
+
+// Where a key with no END line stops: the rest of the BEGIN line, then every
+// following body or header line (a blank line after a header too). Truncated
+// output and one-line JSON strings land here. Each line is read once.
+function openKeyEnd(text: string, after: number): number {
+  const nl = text.indexOf('\n', after)
+  let end = nl === -1 ? text.length : nl
+  if (end > after && text.charAt(end - 1) === '\r') end--
+  let header = false
+  while (end < text.length) {
+    let from = end
+    if (text.charAt(from) === '\r') from++
+    if (text.charAt(from) !== '\n') break
+    const start = from + 1
+    const next = text.indexOf('\n', start)
+    let stop = next === -1 ? text.length : next
+    if (stop > start && text.charAt(stop - 1) === '\r') stop--
+    const line = text.slice(start, stop)
+    if (line === '' && header) header = false
+    else if (KEY_HEADER.test(line)) header = true
+    else if (KEY_BODY.test(line) && (line.length >= 16 || /[0-9+/=]/.test(line))) header = false
+    else break
+    end = stop
+  }
+  return end
+}
+
 // BEGIN-to-END pairing via one scan for each marker plus a binary search per
 // BEGIN: strictly linear, safe on adversarial input.
 function redactPrivateKeys(text: string, bump: (kind: string) => void): string {
@@ -389,7 +610,7 @@ function redactPrivateKeys(text: string, bump: (kind: string) => void): string {
         lo = mid + 1
       }
     }
-    if (pick === -1) continue
+    if (pick === -1) pick = openKeyEnd(text, b.after)
     out += text.slice(copied, b.start) + REDACTED_KEY
     copied = pick
     bump('private-key')
@@ -398,8 +619,9 @@ function redactPrivateKeys(text: string, bump: (kind: string) => void): string {
   return out
 }
 
-// Names whose value is worth checking: password, secret, token, api_key.
-const ASSIGNMENT_WORD = /password|secret|token|api[_-]key/gi
+// Names whose value is worth checking: password, secret, token, api_key and
+// the AWS secret_access_key (also SecretAccessKey).
+const ASSIGNMENT_WORD = /secret[_-]?access[_-]?key|password|secret|token|api[_-]key/gi
 
 const MIN_ASSIGNED = 20
 
