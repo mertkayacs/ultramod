@@ -71,6 +71,10 @@ One real session, start to finish:
 
 <p align="center"><img src="https://raw.githubusercontent.com/mertkayacs/ultramod/media/demo.gif" alt="Claude Code with Ultra Mod: the HUD above the prompt, a receipt under the answer, the guard holding git reset --hard, /ultra undo restoring the work, a refused .env read and the control pane" width="900"></p>
 
+One real session, start to finish:
+
+<p align="center"><img src="https://raw.githubusercontent.com/mertkayacs/ultramod/media/trailer-hero.gif" alt="Ultra Mod in Claude Code: a receipt under the answer, the guard holding git reset --hard and /ultra undo bringing the work back, a refused .env read and the five sets" width="900"></p>
+
 <table>
   <tr>
     <td width="50%"><img src="https://raw.githubusercontent.com/mertkayacs/ultramod/media/clips/receipt.gif" alt="The HUD above the prompt and a receipt under the answer: 1 cmd, tests passed, 6s, cost"><br><b>HUD and receipts.</b> Limits with reset times above the prompt, and what really ran under every answer.</td>
