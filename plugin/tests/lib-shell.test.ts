@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'claude-code/testing'
-import { splitCommand, tokens, normalize, baseName, commandTokens } from '../hooks/lib/shell'
+import { splitCommand, splitPipelines, tokens, argv, normalize, baseName, commandTokens, commandArgv } from '../hooks/lib/shell'
 
 describe('splitCommand', () => {
   test('splits on every separator', () => {
@@ -171,5 +171,85 @@ describe('normalize and helpers', () => {
   test('commandTokens unwraps env before a command', () => {
     expect(commandTokens('env rm -rf /')).toEqual(['rm', '-rf', '/'])
     expect(commandTokens('env GIT_DIR=x git status')).toEqual(['git', 'status'])
+  })
+})
+
+describe('heredoc and comment parsing', () => {
+  test('a command after the declaration on the same line is its own command', () => {
+    expect(splitCommand('psql <<SQL; rm -rf /x\nSELECT 1;\nSQL')).toEqual(['psql <<SQL\nSELECT 1;\nSQL', 'rm -rf /x'])
+  })
+
+  test('a command after the terminator line is its own command', () => {
+    expect(splitCommand('cat << EOF\nhello\nEOF\nrm -rf /y')).toEqual(['cat << EOF\nhello\nEOF', 'rm -rf /y'])
+  })
+
+  test('two heredocs on one line hand each body back', () => {
+    expect(splitCommand('cat <<A <<B\none\nA\ntwo\nB\nls')).toEqual(['cat <<A <<B\none\nA\ntwo\nB', 'ls'])
+  })
+
+  test('a comment is dropped and its quote does not open a string', () => {
+    expect(splitCommand("ls # it's\npwd")).toEqual(['ls', 'pwd'])
+  })
+
+  test('# inside a word or an expansion is not a comment', () => {
+    expect(splitCommand('echo a#b')).toEqual(['echo a#b'])
+    expect(splitCommand('echo ${#x}; ls')).toEqual(['echo ${#x}', 'ls'])
+  })
+})
+
+describe('splitPipelines', () => {
+  test('groups commands joined by a real pipe', () => {
+    expect(splitPipelines('a | b | c; d')).toEqual([['a', 'b', 'c'], ['d']])
+  })
+
+  test('|| and && close a pipeline', () => {
+    expect(splitPipelines('a | b || c')).toEqual([['a', 'b'], ['c']])
+    expect(splitPipelines('a && b | c')).toEqual([['a'], ['b', 'c']])
+  })
+
+  test('|& and a line break after the pipe continue it', () => {
+    expect(splitPipelines('a |& b')).toEqual([['a', 'b']])
+    expect(splitPipelines('a |\nb')).toEqual([['a', 'b']])
+  })
+
+  test('sh -c bodies and substitutions bring their own pipelines', () => {
+    expect(splitPipelines("sh -c 'a | b'")).toContainEqual(['a', 'b'])
+    expect(splitPipelines('echo $(a | b)')).toContainEqual(['a', 'b'])
+  })
+
+  test('a quoted name stays one command', () => {
+    expect(splitPipelines('curl x | "sh"')).toEqual([['curl x', '"sh"']])
+  })
+})
+
+describe('argv and wrappers', () => {
+  test('redirect operators and their targets are not arguments', () => {
+    expect(argv('rm -rf a 2> /dev/null')).toEqual(['rm', '-rf', 'a'])
+    expect(argv('rm -rf a 2>&1')).toEqual(['rm', '-rf', 'a'])
+    expect(argv('rm -rf a >&2')).toEqual(['rm', '-rf', 'a'])
+    expect(argv('2>/dev/null rm -rf a')).toEqual(['rm', '-rf', 'a'])
+    expect(argv('rm a 2 >&1')).toEqual(['rm', 'a', '2'])
+  })
+
+  test('a quoted > stays a word and a comment is dropped', () => {
+    expect(argv("rm '>' a")).toEqual(['rm', '>', 'a'])
+    expect(argv('rm a # note')).toEqual(['rm', 'a'])
+    expect(argv("rm a '#b'")).toEqual(['rm', 'a', '#b'])
+  })
+
+  test('commandArgv strips wrappers behind a redirect', () => {
+    expect(commandArgv('>/dev/null sudo -u root rm -rf a')).toEqual(['rm', '-rf', 'a'])
+  })
+
+  test('commandTokens strips assignments and flagged wrappers', () => {
+    expect(commandTokens('FOO=1 BAR=2 node x.js')).toEqual(['node', 'x.js'])
+    expect(commandTokens('sudo -E -u root cat f')).toEqual(['cat', 'f'])
+    expect(commandTokens('timeout 5 sleep 1')).toEqual(['sleep', '1'])
+    expect(commandTokens('FOO=1')).toEqual(['FOO=1'])
+  })
+
+  test('sudo and shell wrappers unwrap -c bodies and eval', () => {
+    expect(splitCommand('sudo -u x sh -c "ls"')).toContain('ls')
+    expect(splitCommand('eval "ls -la"')).toContain('ls -la')
   })
 })

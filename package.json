@@ -48,7 +48,7 @@
     "validate": "claude plugin validate ./ --strict && claude plugin validate ./plugin --strict",
     "test": "claude plugin test ./plugin",
     "typecheck": "node scripts/engine-types.mjs && tsc --noEmit",
-    "installer:test": "node --test test/installer.test.mjs",
+    "installer:test": "node --experimental-strip-types --test test/installer.test.mjs test/guard-git.test.mjs",
     "check": "npm run validate && npm test && npm run typecheck"
   },
   "devDependencies": {
