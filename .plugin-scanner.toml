@@ -1,0 +1,3 @@
+[scanner]
+# The test suites hold fake tokens on purpose: they prove the redaction works.
+ignore_paths = ["tests/**", "plugin/tests/**"]
