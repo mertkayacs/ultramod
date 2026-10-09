@@ -107,7 +107,7 @@ Flip any single mod in the `/ultra` pane. A changed set shows as `essentials*`; 
 
 ## Trust
 
-Ultra Mod makes no network requests, sends no telemetry and has no dependencies. It starts only `git`, your system notifier (`notify-send`, `osascript` or PowerShell), `uname` and `which`. Guards fail closed: if a check breaks, the command is refused. Everything else fails open: a broken HUD never blocks a tool call.
+Ultra Mod makes no network requests, sends no telemetry and has no dependencies. It starts only `git`, `rm -f` (or `cmd /c del` on Windows) for the temporary index a snapshot uses, your system notifier (`notify-send`, `osascript` or PowerShell), `uname` and `which`. Guards fail closed: if a check breaks, the command is refused. Everything else fails open: a broken HUD never blocks a tool call.
 
 Mods run inside Claude Code with your permissions, so read before you install. `claude plugin validate` lists every event a mod hooks and every call it makes, without running it. [docs/security.md](docs/security.md) has the same list per mod.
 

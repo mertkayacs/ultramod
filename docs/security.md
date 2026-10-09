@@ -25,7 +25,7 @@ Every mod reads its settings through the shared sets engine (`$.state.get` on `u
 |-----|-------|
 | hud | `$.state.get` (set, turn), `$.state.set` (turn), `$.clock.now`, `$.clock.every`, `$.session.usage`, `$.session.model`, `$.ui.resolve` |
 | receipts | `$.state.get` (set, receipts), `$.state.set` (receipts), `$.session.usage`, `$.clock.now` |
-| guard | `$.state.get` (set, allow, guard-approved), `$.state.set` (allow, guard-approved), `$.ui.ask`, `$.ui.log`, `$.ui.toast`, `$.process.run` (git, and the notifier's uname, which, notify-send, osascript, powershell.exe), `$.clock.now`, `$.clock.after`, `$.session.cwd`, `$.session.root`, `$.env.get` (OS, WSL_DISTRO_NAME), `$.audio.play` |
+| guard | `$.state.get` (set, allow, guard-approved), `$.state.set` (allow, guard-approved), `$.ui.ask`, `$.ui.log`, `$.ui.toast`, `$.process.run` (git, `rm -f` or `cmd /c del` for the snapshot's temporary index, and the notifier's uname, which, notify-send, osascript, powershell.exe), `$.clock.now`, `$.clock.after`, `$.session.cwd`, `$.session.root`, `$.env.get` (OS, WSL_DISTRO_NAME), `$.audio.play` |
 | secrets | `$.state.get` (set, allow), `$.state.set` (allow), `$.ui.log` |
 | tests | `$.state.get` (set), `$.fs.read`, `$.fs.exists`, `$.ui.ask`, plus the notifier calls (`$.clock.after`, `$.clock.now`, `$.env.get`, `$.process.run`, `$.ui.toast`, `$.audio.play`, `$.session.root`) |
 | notify | `$.state.get` (set), `$.env.get` (OS, WSL_DISTRO_NAME), `$.process.run` (uname, which, notify-send, osascript, powershell.exe), `$.ui.toast`, `$.audio.play`, `$.clock.now`, `$.clock.after`, `$.session.root` |
