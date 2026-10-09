@@ -2,6 +2,7 @@ import type { UltraApi } from '../core/api'
 import type { Args, EventResult, Frozen } from 'claude-code'
 import { atom, read, update } from 'claude-code'
 import { resolveSet, settingsFor } from '../core/sets'
+import { addAllowedPath } from '../core/state'
 import type { UltraMod } from '../core/mod'
 import type { UltraModSettings } from '../../types/index'
 import { bashReadsSecret, isEnvDump, isSecretPath, redactSecrets } from '../lib/secrets'
@@ -233,7 +234,7 @@ export const secrets: UltraMod = {
     allow: async ($, args) => {
       const path = unquote(args.trim())
       if (!looksLikePath(path)) return null
-      await update($, allow, current => ({ ...current, paths: [...current.paths, path] }))
+      await update($, allow, current => addAllowedPath(current, path))
       return { text: `Secrets: ${path} is allowed for this session.` }
     },
   },

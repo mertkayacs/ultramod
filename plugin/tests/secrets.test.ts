@@ -185,6 +185,13 @@ describe('secrets allow subcommand', () => {
     expect(await call(w, read('.env'))).toMatchObject({ result: 'ran' })
   })
 
+  test('allowing the same path twice keeps one entry (C43)', async () => {
+    const w = world()
+    await secrets.commands?.allow?.(w.$, '.env')
+    await secrets.commands?.allow?.(w.$, '.env')
+    expect(w.state.get('allow')).toEqual({ risks: [], paths: ['.env'] })
+  })
+
   test('a non-path argument defers to guard', async () => {
     const answer = await secrets.commands?.allow?.(world().$, 'git-reset-hard')
     expect(answer).toBe(null)
