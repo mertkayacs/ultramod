@@ -224,3 +224,17 @@ test('findConflicts scans a large tree in linear time', () => {
   assert.deepEqual(findConflicts([...current, 'pkg1/dir1'], snapshot), ['pkg1/dir1']);
   assert.ok(Date.now() - started < 2_000, `took ${Date.now() - started} ms`);
 });
+
+// A machine with no git identity (fresh CI image, new laptop) still gets a snapshot.
+test('a snapshot is saved when git has no user name or email configured', async () => {
+  const dir = repo();
+  git(dir, 'config', '--unset', 'user.email');
+  git(dir, 'config', '--unset', 'user.name');
+  writeFileSync(join(dir, 'a.txt'), 'dirty\n');
+  const home = join(root, `home${n++}`);
+  mkdirSync(home);
+  const bare = { HOME: home, XDG_CONFIG_HOME: home, GIT_CONFIG_NOSYSTEM: '1', EMAIL: '' };
+  const noIdentity = (argv, cwd, env) => run(argv, cwd, { ...bare, ...env });
+  await saveSnapshot(noIdentity, drop, dir, 'ultramod snapshot: git reset --hard', 4_000_000, fail);
+  assert.match(git(dir, 'for-each-ref', '--format=%(objectname)', SNAPSHOT_REF), /^[0-9a-f]{40}$/);
+});

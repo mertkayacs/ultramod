@@ -105,7 +105,7 @@ test('ask mode with Run it snapshots then runs, with the exact git sequence', as
     { argv: ['git', 'rev-parse', '--verify', 'HEAD'], init: { cwd: '/work' } },
     { argv: ['git', 'add', '-A'], init: { cwd: '/work', env: { GIT_INDEX_FILE: '.git/ultramod-index' } } },
     { argv: ['git', 'write-tree'], init: { cwd: '/work', env: { GIT_INDEX_FILE: '.git/ultramod-index' } } },
-    { argv: ['git', 'commit-tree', 'tree123', '-p', 'head123', '-m', 'ultramod snapshot: git reset --hard'], init: { cwd: '/work' } },
+    { argv: ['git', 'commit-tree', 'tree123', '-p', 'head123', '-m', 'ultramod snapshot: git reset --hard'], init: { cwd: '/work', env: { GIT_AUTHOR_NAME: 'Ultra Mod', GIT_AUTHOR_EMAIL: 'ultramod@localhost', GIT_COMMITTER_NAME: 'Ultra Mod', GIT_COMMITTER_EMAIL: 'ultramod@localhost' } } },
     { argv: ['git', 'update-ref', 'refs/worktree/ultramod/snapshots/19700101-000000-000', 'commit123', ''], init: { cwd: '/work' } },
     { argv: ['rm', '-f', '.git/ultramod-index'], init: { cwd: '/work' } },
     { argv: ['git', 'for-each-ref', '--sort=-committerdate', '--sort=-refname', '--format=%(refname)', 'refs/worktree/ultramod/snapshots/'], init: { cwd: '/work' } },
