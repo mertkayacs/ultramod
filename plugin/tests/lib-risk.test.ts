@@ -103,8 +103,8 @@ const CASES: Case[] = [
   { cmd: 'git branch -fd feature', want: 'git-branch-force-delete' },
   { cmd: 'git branch -d --force feature', want: 'git-branch-force-delete' },
   { cmd: 'git branch --delete -f feature', want: 'git-branch-force-delete' },
-  { cmd: 'git stash drop stash@{1}', want: 'git-stash-drop', snapshot: true },
-  { cmd: 'git stash clear', want: 'git-stash-drop', snapshot: true },
+  { cmd: 'git stash drop stash@{1}', want: 'git-stash-drop', snapshot: false },
+  { cmd: 'git stash clear', want: 'git-stash-drop', snapshot: false },
   { cmd: 'git filter-branch --env-filter "x"', want: 'git-history-rewrite' },
   { cmd: 'git filter-repo --replace-text expressions.txt', want: 'git-history-rewrite' },
   // git look-alikes

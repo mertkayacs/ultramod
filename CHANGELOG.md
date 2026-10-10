@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.9 (2026-10-10)
+
+Fixes from Greptile's second review of the claude-code-templates listing. Each fix has a test that fails on 1.0.8.
+
+### Fixes
+- secrets: a redirect only hides a read when it goes to a file. `cat .env > /dev/stderr`, `> /dev/stdout`, `> /dev/fd/N`, `> /proc/self/fd/N` and `> >(cat)` still print the file into the Bash output, so they are refused like a plain `cat .env`. Words after a redirect are checked too (`cat > out .env`)
+- guard: `git stash drop` and `git stash clear` no longer promise a snapshot. The snapshot saves the work tree, not the stash entries being deleted, so `/ultra undo` could not bring them back
+- guard: each snapshot and each restore writes through a temporary index of its own (`ultramod-index-<id>`, `ultramod-restore-index-<id>`), so two sessions in one work tree no longer delete each other's index mid-snapshot
+- sets: after `/cd` or a worktree move the project's own saved set is loaded before the next check. The set read for the first project stayed active, and a later toggle saved it under the new project
+
 ## 1.0.8 (2026-10-09)
 
 Fixes from the third review round on the claude-code-templates listing.

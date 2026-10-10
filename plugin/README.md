@@ -73,11 +73,11 @@ None.
 Every program starts through `$.process.run` with an argument list; no shell reads any of it.
 
 - `git`, in the repository you work in, for guard's snapshots and `/ultra undo`:
-  - `git rev-parse --is-inside-work-tree`, `git rev-parse --show-toplevel`, `git rev-parse --git-path ultramod-index`, `git rev-parse --verify HEAD`: find the repository, its root and the current commit.
+  - `git rev-parse --is-inside-work-tree`, `git rev-parse --show-toplevel`, `git rev-parse --git-path ultramod-index-<id>`, `git rev-parse --verify HEAD`: find the repository, its root and the current commit.
   - `git rev-parse --show-prefix`, only for a risky command whose paths climb above the session directory (`git -C .. reset --hard`): find where the session sits in the work tree, so a path that stays inside the repository still gets a snapshot.
-  - `git add -A` and `git write-tree`, with `GIT_INDEX_FILE` set to the temporary index `ultramod-index`: record the work tree as it is, without touching your own index.
+  - `git add -A` and `git write-tree`, with `GIT_INDEX_FILE` set to a temporary index of its own, `ultramod-index-<id>`: record the work tree as it is, without touching your own index.
   - `git commit-tree <tree> [-p <HEAD>] -m "ultramod snapshot: <command>"` with the author and committer "Ultra Mod <ultramod@localhost>", then `git update-ref refs/worktree/ultramod/snapshots/<time> <commit>`: keep the snapshot as a ref. `git for-each-ref` lists them and `git update-ref -d` drops the oldest past 20.
-  - `/ultra undo <n>`, after you confirm: `git rev-parse --git-path ultramod-restore-index`, `git add -A`, `git ls-files`, `git ls-tree -r --name-only --full-tree <snapshot>`, `git read-tree <snapshot>` and `git checkout-index --all --force`, all on the temporary index `ultramod-restore-index`, write the snapshot's files back into the work tree.
+  - `/ultra undo <n>`, after you confirm: `git rev-parse --git-path ultramod-restore-index-<id>`, `git add -A`, `git ls-files`, `git ls-tree -r --name-only --full-tree <snapshot>`, `git read-tree <snapshot>` and `git checkout-index --all --force`, all on a temporary index of its own, `ultramod-restore-index-<id>`, write the snapshot's files back into the work tree.
   - `git --version`, for `/ultra doctor`.
   - It never pushes, fetches, commits on a branch, or changes your branch, your index or your history.
 - `rm -f <git dir>/ultramod-index` (or `ultramod-restore-index`) on Linux and macOS: remove the temporary index right after use. On Windows the same file is removed by the script this plugin ships, `powershell.exe -NoProfile -ExecutionPolicy Bypass -File <plugin>\scripts\remove-index.ps1 -Path <git dir>\ultramod-index`, which removes those two file names and nothing else.

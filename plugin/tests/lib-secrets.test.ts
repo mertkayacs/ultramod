@@ -325,6 +325,25 @@ describe('bashReadsSecret with a protected env file (C05)', () => {
   test('stdout redirected away is not a read', () => {
     expect(bashReadsSecret("node --env-file=.env -p 'process.env.A' > /tmp/out")).toBe(null)
   })
+
+  test('a redirect that still lands in the Bash output is a read', () => {
+    for (const cmd of [
+      'cat .env > /dev/stderr',
+      'cat .env >> /dev/stderr',
+      'cat .env > /dev/stdout',
+      'cat .env 1> /dev/fd/2',
+      'cat .env &> /dev/stderr',
+      'cat .env > /proc/self/fd/1',
+      'cat .env > >(cat)',
+      'cat > /dev/stderr .env',
+    ]) expect(bashReadsSecret(cmd), cmd).toBe('.env')
+  })
+
+  test('a redirect to a real file is still not a read', () => {
+    for (const cmd of ['cat .env > /tmp/out', 'cat .env >> backup.txt', 'cat .env 1> out.txt', 'cat .env &> all.log']) {
+      expect(bashReadsSecret(cmd), cmd).toBe(null)
+    }
+  })
 })
 
 describe('bashReadsSecret honors the allow list (C10)', () => {

@@ -86,7 +86,7 @@ Options: `Run it` / `Allow for session` / `Refuse`. In `claude -p`, on dismiss, 
 | git-restore-discard | `git restore .` / `git restore --staged --worktree .` | discards changes in the whole tree | yes |
 | git-push-force | `git push --force` / `-f` (not `--force-with-lease`) | overwrites remote history | no |
 | git-branch-force-delete | `git branch -D` | force deletes a branch | no |
-| git-stash-drop | `git stash drop` / `clear` | deletes stashed work | yes |
+| git-stash-drop | `git stash drop` / `clear` | deletes stashed work | no |
 | git-history-rewrite | `git filter-branch` / `git filter-repo` | rewrites git history | no |
 | sql-drop | `drop database\|schema\|table` | drops a database object | no |
 | sql-truncate | `truncate table` | empties a table | no |

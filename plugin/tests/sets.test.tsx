@@ -9,7 +9,7 @@ import type { UltraApi } from '../hooks/core/api'
 
 const command = (args: string) => ({ command: 'ultra', args, origin: { kind: 'composer' } as const, presentation: { isFullscreen: false, columns: 100 } })
 const PANE: RenderPropsOf['Pane'] = { title: 'Ultra Mod', isFocused: true, bodyColumns: 100, placement: 'inline', scroll: { offset: 0, bodyRows: 20 }, view: {} }
-function world(on: On, entries: Record<string, unknown> = {}, env: Record<string, string> = {}) {
+function world(on: On, entries: Record<string, unknown> = {}, env: Record<string, string> = {}, root: () => string = () => '/work') {
   mock.clock(on)
   mock.env(on, env)
   const saved = new Map(Object.entries(entries))
@@ -17,7 +17,7 @@ function world(on: On, entries: Record<string, unknown> = {}, env: Record<string
   const registrations: unknown[] = []
   on('store.get', ($, e) => ({ value: saved.get(e.key) }))
   on('store.set', ($, e) => { saved.set(e.key, e.value); return { value: undefined } })
-  on('session.root', () => ({ value: '/work' }))
+  on('session.root', () => ({ value: root() }))
   on('session.cwd', () => ({ value: '/work' }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   // The pane draws the hud row, so it reads usage and the model.
@@ -252,4 +252,19 @@ test('command output carries no second Ultra Mod prefix', async ($, on) => {
     expect(text).toBeDefined()
     for (const line of String(text).split('\n')) expect(line.startsWith('Ultra Mod')).toBe(false)
   }
+})
+
+test('moving to another project root loads that project before the next check and saves under it', async ($, on) => {
+  let root = '/a'
+  const { saved, states } = world(on, { [projectKey('/a')]: { set: 'flow' }, [projectKey('/b')]: { set: 'marathon' } }, {}, () => root)
+  on('tool.call', () => ({ result: 'ok' }))
+  const probe = { tool: 'probe', input: {} } as unknown as ToolCallArgs
+  await $.tool.call(probe)
+  expect(states.at(-1)?.name).toBe('flow')
+  root = '/b'
+  await $.tool.call(probe)
+  expect(states.at(-1)?.name).toBe('marathon')
+  await $.command.run(command('set quiet'))
+  expect(saved.get(projectKey('/b'))).toEqual({ set: 'quiet', overrides: {} })
+  expect(saved.get(projectKey('/a'))).toEqual({ set: 'flow' })
 })

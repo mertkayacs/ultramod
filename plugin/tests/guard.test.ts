@@ -79,6 +79,8 @@ function world(on: On, set?: UltraSet) {
 }
 
 const argvOnly = (runs: Run[]) => runs.map(run => run.argv)
+// Each snapshot and restore asks git for a temporary index name of its own; the sequence is read with the suffix removed.
+const plainName = (run: Run) => ({ argv: run.argv.map(arg => arg.replace(/^(ultramod-(?:restore-)?index)-.+$/, '$1')), init: run.init })
 const bash = (commandLine: string) => ({ tool: 'Bash' as const, command: commandLine })
 
 test('ask mode runs a safe command without a question', async ($, on) => {
@@ -96,7 +98,7 @@ test('ask mode with Run it snapshots then runs, with the exact git sequence', as
     question: 'Run `git reset --hard`? It discards uncommitted changes. A work tree snapshot is saved first, so /ultra undo can restore it.',
     options: ['Run it', 'Allow for session', 'Refuse'],
   }])
-  expect(state.runs.map(run => ({ argv: run.argv, init: run.init }))).toEqual([
+  expect(state.runs.map(plainName)).toEqual([
     { argv: ['git', 'rev-parse', '--is-inside-work-tree'], init: { cwd: '/work' } },
     { argv: ['git', 'rev-parse', '--show-toplevel'], init: { cwd: '/work' } },
     { argv: ['git', 'rev-parse', '--git-path', 'ultramod-index'], init: { cwd: '/work' } },
@@ -269,7 +271,7 @@ test('/ultra undo <n> restores after a confirm and keeps newer files', async ($,
   state.answers.push('Restore')
   const answer = await $.command.run(command('undo 1'))
   expect(answer.text).toBe('Restored snapshot 1: 2 files (src/a.ts, src/b.ts). Files created after it were kept.')
-  expect(state.runs.map(run => ({ argv: run.argv, init: run.init }))).toEqual([
+  expect(state.runs.map(plainName)).toEqual([
     { argv: ['git', 'for-each-ref', '--sort=-committerdate', '--sort=-refname', '--format=%(objectname)%09%(committerdate:unix)%09%(contents:subject)', 'refs/worktree/ultramod/snapshots/'], init: { cwd: '/work' } },
     { argv: ['git', 'rev-parse', '--show-toplevel'], init: { cwd: '/work' } },
     { argv: ['git', 'rev-parse', '--git-path', 'ultramod-restore-index'], init: { cwd: '/work' } },
