@@ -35,7 +35,7 @@ Every mod reads its settings through the shared sets engine (`$.state.get` on `u
 | notify | `$.state.get` (set), `$.env.get` (OS, WSL_DISTRO_NAME), `$.process.run` (uname, which, notify-send, osascript, wslpath, powershell.exe), `$.plugin.root`, `$.ui.toast`, `$.audio.play`, `$.clock.now`, `$.clock.after`, `$.session.root` |
 | compact | `$.state.get` (set, receipts, compact), `$.state.set` (compact), `$.session.usage`, `$.session.compact`, `$.clock.after`, `$.ui.toast`, `$.ui.log`, `$.ui.resolve` |
 | loops | `$.state.get` (set), `$.ui.toast` |
-| pins | `$.state.get` (set), `$.fs.stat`, `$.fs.read`, `$.fs.write` (via `/ultra pin`), `$.env.get` (HOME, USERPROFILE), `$.session.root` |
+| pins | `$.state.get` (set), `$.ui.toast` (one notice for an unapproved project file), `$.fs.stat`, `$.fs.read`, `$.fs.write` (via `/ultra pin`), `$.env.get` (HOME, USERPROFILE), `$.session.root` |
 | tidy | `$.state.get` (set), `$.fs.exists`, `$.session.root`, `$.ui.ask` |
 
 The core outside the mods also calls `$.store.get`/`$.store.set` (the per-project set choice), `$.command.register` (`/ultra`), `$.session.version` (`/ultra doctor`) and `$.ui.open` (`/ultra`) through the facade in `register.tsx`. The facade forwards nothing else. Its one file write, `fs.writePins`, writes `<project root>/.claude/pins.md` and no other path.

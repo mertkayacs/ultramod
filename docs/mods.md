@@ -249,7 +249,7 @@ Each nudge fires once per signature.
 
 ## pins: rules Claude cannot forget
 
-If `.claude/pins.md` (project) or `~/.claude/pins.md` (user) exists, adds one system prompt section via `prompt.compose` with `scope: 'session'`:
+If `~/.claude/pins.md` (user) exists, or `.claude/pins.md` (project) exists and you have approved it, adds one system prompt section via `prompt.compose` with `scope: 'session'`:
 
 ```
 Pinned rules from the user. Follow them in every reply:
@@ -263,6 +263,8 @@ Pinned rules from the user. Follow them in every reply:
 Max 30 lines, 3,000 characters, truncated with a note. No file, no section, no tokens.
 
 `/ultra pin <text>` appends a line to the project file. `/ultra pins` lists them. Re-read on file change via `$.fs.stat` mtime check at each `prompt.compose`.
+
+A project pin file is repository content: a clone can ship one. Its lines are data, not instructions, until you read them with `/ultra pins` and run `/ultra pins approve`. The approval covers that exact text for the rest of the session; if the file changes, or in a new session, it needs approving again, and Ultra Mod shows one notice when a project file is waiting. Your own file under the home directory needs no approval. `/ultra pin <text>` into a new file, or into a file you already approved, keeps it approved; into a file with lines you have not approved, it adds the line and leaves the file waiting.
 
 ---
 
