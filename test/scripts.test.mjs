@@ -19,9 +19,14 @@ test('notify.ps1 takes the body as base64 data', () => {
   assert.match(script, /ShowBalloonTip\(5000, 'Claude Code', \$body, 'Info'\)/);
 });
 
-test('remove-index.ps1 removes only the two Ultra Mod index files', () => {
+test('remove-index.ps1 removes only the index files Ultra Mod creates', () => {
   const script = read('remove-index.ps1');
   assert.match(script, /param\(\s*\[Parameter\(Mandatory = \$true\)\]\[string\]\$Path\s*\)/);
-  assert.match(script, /if \(\$name -ne 'ultramod-index' -and \$name -ne 'ultramod-restore-index'\) \{ exit 2 \}/);
+  const check = script.match(/if \(\$name -notmatch '([^']+)'\) \{ exit 2 \}/);
+  assert.ok(check, 'the name check is a -notmatch on the index names');
+  const allowed = new RegExp(check[1], 'i');
+  // The names snapshot.ts generates: base, milliseconds, counter, random suffix.
+  for (const name of ['ultramod-index', 'ultramod-restore-index', 'ultramod-index-1700000000000-3-k2j9xa', 'ultramod-restore-index-0-1-ab12cd']) assert.ok(allowed.test(name), name);
+  for (const name of ['index', 'ultramod-index.bak', 'ultramod-index-', 'ultramod-index-..\\x', 'other-ultramod-index', 'ultramod-index-a b']) assert.ok(!allowed.test(name), name);
   assert.match(script, /Remove-Item -LiteralPath \$Path -Force/);
 });
