@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.12 (2026-10-11)
+
+### Security
+- pins: project pin approvals are checked against fresh file text instead of an mtime cache, so editing `.claude/pins.md` requires approval again even when the timestamp is restored. The README and plugin README now state that project approval covers only the exact file text in the current session
+
 ## 1.0.11 (2026-10-10)
 
 Review feedback from the buildwithclaude listing. Each change has a test that fails on 1.0.10.
