@@ -191,26 +191,26 @@ describe('pins appends a session section', () => {
   })
 })
 
-describe('pins caches by mtime', () => {
-  test('an unchanged mtime does not re-read', async () => {
+describe('pins caches user pins by mtime', () => {
+  test('an unchanged user file mtime does not re-read', async () => {
     const w = world()
-    w.files.set(PROJECT, '- rule\n')
-    w.stats.set(PROJECT, { mtimeMs: 7 })
+    w.files.set(USER, '- rule\n')
+    w.stats.set(USER, { mtimeMs: 7 })
     await compose(w)
     await compose(w)
     expect(w.statCalls).toEqual([PROJECT, USER, PROJECT, USER])
-    expect(w.readCalls).toEqual([PROJECT])
+    expect(w.readCalls).toEqual([USER])
   })
 
-  test('a changed mtime re-reads', async () => {
+  test('a changed user file mtime re-reads', async () => {
     const w = world()
-    w.files.set(PROJECT, '- rule one\n')
-    w.stats.set(PROJECT, { mtimeMs: 7 })
+    w.files.set(USER, '- rule one\n')
+    w.stats.set(USER, { mtimeMs: 7 })
     await compose(w)
-    w.files.set(PROJECT, '- rule one\n- rule two\n')
-    w.stats.set(PROJECT, { mtimeMs: 8 })
+    w.files.set(USER, '- rule one\n- rule two\n')
+    w.stats.set(USER, { mtimeMs: 8 })
     const answer = await compose(w)
-    expect(w.readCalls).toEqual([PROJECT, PROJECT])
+    expect(w.readCalls).toEqual([USER, USER])
     expect(answer.sections.at(-1)?.text).toContain('- rule two')
   })
 })
@@ -267,7 +267,7 @@ describe('pins subcommands', () => {
     w.stats.set(PROJECT, { mtimeMs: 1 })
     const answer = await compose(w)
     expect(answer.sections.at(-1)?.text).toBe('Pinned rules from the user. Follow them in every reply:\n- project rule')
-    expect(w.readCalls).toEqual([PROJECT])
+    expect(w.readCalls).toEqual([PROJECT, PROJECT])
   })
 
   test('the same path for project and user pins is used once', async () => {

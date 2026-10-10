@@ -60,10 +60,10 @@ Most Claude Code setups grow the same pile of extras: a status line script for u
 | **notify** | A desktop notification when a long turn ends or Claude is waiting for you | yes |
 | **compact** | Warns at 70% context, offers a one-key compaction at 85%, and keeps the files, failures and open claims in the summary | yes |
 | **loops** | Spots the same command failing three times with the same error and tells Claude to stop and rethink | yes |
-| **pins** | Keeps the rules in `.claude/pins.md` in the system prompt, so they survive long sessions and compaction | when the file exists; a project file after you approve it |
+| **pins** | Keeps the rules in `.claude/pins.md` in the system prompt, so they survive long sessions and compaction | when the file exists; a project file after you approve its exact text for this session |
 | **tidy** | Asks before Claude writes new summary or notes files you did not ask for | strict set |
 
-Ultra Mod calls no model itself, and `claude plugin details ultramod` reports about 0 always-on tokens. It still adds some text to what Claude reads: the lines of `~/.claude/pins.md`, and of the project's `.claude/pins.md` once you approve it with `/ultra pins approve` (at most 30 lines and 3,000 characters), go into the system prompt of every request, and a refusal or a loop nudge is a short message in the conversation. Compaction runs the normal `/compact`, from the Compact now button or, in the marathon set, by itself at 88%.
+Ultra Mod calls no model itself, and `claude plugin details ultramod` reports about 0 always-on tokens. It still adds some text to what Claude reads: the lines of `~/.claude/pins.md`, and of the project's `.claude/pins.md` once you approve it with `/ultra pins approve` (at most 30 lines and 3,000 characters), go into the system prompt of every request. That project approval applies only to the exact file text in the current session; editing the file requires approval again. A refusal or a loop nudge is a short message in the conversation. Compaction runs the normal `/compact`, from the Compact now button or, in the marathon set, by itself at 88%.
 
 ## See it
 
