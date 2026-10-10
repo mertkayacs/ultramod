@@ -26,7 +26,7 @@ No network calls. No telemetry. No runtime dependencies. The validator confirms 
 Yes. Open `/ultra` and flip any mod toggle. The set shows as `essentials*` (customised). Overrides are saved per project. `/ultra reset` drops them.
 
 ### What does "if file" mean for pins?
-The pins mod only adds a system prompt section when `.claude/pins.md` (project) or `~/.claude/pins.md` (user) exists. No file, no tokens.
+The pins mod only adds a system prompt section when `~/.claude/pins.md` (user) exists, or when `.claude/pins.md` (project) exists and you approved it with `/ultra pins approve`. No file, no tokens.
 
 ### Why is tidy off in essentials?
 It only asks before creating new documentation files outside the allowlist (README, CHANGELOG, CONTRIBUTING, LICENSE, docs/, .claude/, .github/, AGENTS.md, CLAUDE.md). Most users don't need it daily. Turn it on in strict or marathon.
@@ -137,7 +137,7 @@ Run `/ultra doctor` to see the detected notifier. On Linux, `notify-send` must b
 Check compact mode and `offerAt` threshold. The button only appears when context percent ≥ `offerAt` (85 in essentials) and the HUD is in `full` mode (not `compact`).
 
 ### Pins don't apply.
-Check that `.claude/pins.md` or `~/.claude/pins.md` exists and has bullet or plain lines. Run `/ultra pins` to see what Ultra Mod reads. The section is added at `prompt.compose` with `scope: 'session'`.
+Check that `.claude/pins.md` or `~/.claude/pins.md` exists and has bullet or plain lines. Run `/ultra pins` to see what Ultra Mod reads; a project file shows as "not applied" until you run `/ultra pins approve`. The section is added at `prompt.compose` with `scope: 'session'`.
 
 ## Uninstall
 

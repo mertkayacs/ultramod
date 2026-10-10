@@ -20,7 +20,7 @@ Type `/ultra` to open the control pane.
 - **notify**: a desktop notification when a long turn ends or Claude is waiting for you.
 - **compact**: warns at 70% context and offers a one-key compaction at 85%.
 - **loops**: notices the same command failing three times and tells Claude to stop and rethink.
-- **pins**: keeps the rules in `.claude/pins.md` in the system prompt for the whole session.
+- **pins**: keeps the rules in `~/.claude/pins.md`, and in the project's `.claude/pins.md` once you approve it, in the system prompt for the whole session.
 - **tidy**: asks before Claude writes summary or notes files you did not ask for (strict set).
 
 Five sets switch everything at once: essentials (default), strict, flow, marathon and quiet. `/ultra set strict` saves the choice for the current project.
@@ -91,7 +91,7 @@ The three scripts ship in this plugin's `scripts/` folder. They take their text 
 
 ## Files it writes
 
-- `.claude/pins.md` at the root of the current project, only when you run `/ultra pin <text>`, which appends one line. This is an instructions file: pins adds its lines to the system prompt. Ultra Mod writes no other instructions file and no build, start-up or settings file.
+- `.claude/pins.md` at the root of the current project, only when you run `/ultra pin <text>`, which appends one line. This is an instructions file: pins adds its lines to the system prompt, for a project file only after you approve it with `/ultra pins approve`. Ultra Mod writes no other instructions file and no build, start-up or settings file.
 - Git refs under `refs/worktree/ultramod/snapshots/` in the repository you work in, when guard saves a snapshot before a risky command it lets through.
 - The temporary index files `ultramod-index` and `ultramod-restore-index` in that repository's git directory, removed right after use.
 - The files of a snapshot, written back into your work tree, only when you run `/ultra undo <n>` and confirm.

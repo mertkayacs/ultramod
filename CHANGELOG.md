@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.11 (2026-10-10)
+
+Review feedback from the buildwithclaude listing. Each change has a test that fails on 1.0.10.
+
+### Security
+- pins: a project's `.claude/pins.md` is repository content, so a clone could ship rules that the mod then put into the system prompt as "pinned rules from the user". Its lines are now data until you read them with `/ultra pins` and approve them with `/ultra pins approve`. The approval covers that exact text for the session: a changed file, or a new session, needs approving again, and one notice tells you when a project file is waiting. `~/.claude/pins.md` is yours and needs no approval. `/ultra pin <text>` into a new file, or into one you already approved, keeps it approved; into a file with unapproved lines it adds the line and leaves the file waiting
+
 ## 1.0.10 (2026-10-10)
 
 Fixes for three findings from the third review of the claude-code-templates listing (cubic and Greptile, against 1.0.9). Each fix has a test that fails on 1.0.9.
