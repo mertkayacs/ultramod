@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.10 (2026-10-10)
+
+Fixes for three findings from the third review of the claude-code-templates listing (cubic and Greptile, against 1.0.9). Each fix has a test that fails on 1.0.9.
+
+### Fixes
+- secrets: the last stdout redirect decides where the output goes, as in the shell. `cat .env > /dev/null > /dev/stderr` and `cat .env > out.txt >&2` still print the file and are refused, while `cat .env > /dev/stderr > out.txt` and `cat .env > out.txt 2>&1` write to a file and pass
+- sets: the project root counts as loaded only after its set is published. A failed write after `/cd` is retried on the next call instead of keeping the previous project's set
+- guard: on native Windows `remove-index.ps1` accepts the per-operation index names (`ultramod-index-<id>`, `ultramod-restore-index-<id>`), so snapshots and undo no longer leave their temporary index behind. It still refuses any other file name
+
 ## 1.0.9 (2026-10-10)
 
 Fixes from Greptile's second review of the claude-code-templates listing. Each fix has a test that fails on 1.0.8.
