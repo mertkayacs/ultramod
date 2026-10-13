@@ -1,5 +1,7 @@
 <h1 align="center">Ultra Mod</h1>
 
+[![HOL Guard](https://img.shields.io/endpoint?url=https%3A%2F%2Fhol.org%2Fapi%2Fregistry%2Fbadges%2Fplugin%3Fslug%3Dmertkayacs%252Fultramod%26metric%3Dtrust)](https://hol.org/registry/plugins/mertkayacs%2Fultramod)
+
 <p align="center"><b>The best all-in-one mod pack for Claude Code.</b> Ten mods in one install: your usage limits and context window above the prompt, a guard with undo for <code>rm -rf</code> and <code>git reset --hard</code>, <code>.env</code> files kept away from the model, and a receipt under every answer that shows what really ran.</p>
 
 <p align="center">
