@@ -11,6 +11,7 @@
 
 <p align="center"><img src="https://raw.githubusercontent.com/mertkayacs/ultramod/media/trailer-hero.gif" alt="Ultra Mod in Claude Code: limits and context above the prompt, a receipt under the answer, the guard holding git reset --hard and /ultra undo bringing the work back" width="900"></p>
 
+[![ModsCode](https://modscode.com/badge/mertkayacs-ultramod.svg)](https://modscode.com/claude-mods/mods/mertkayacs-ultramod/)
 ## Install
 
 You need Claude Code 2.1.287 or later (the first release with mods).
