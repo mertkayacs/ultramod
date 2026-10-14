@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "Ultra Mod: All-in-one mod pack for Claude Code"
+version: 1.0.12
+date-released: 2026-10-10
+authors:
+  - family-names: Kaya
+    given-names: Mert
+    orcid: "https://orcid.org/0009-0006-7018-3027"
+repository-code: "https://github.com/mertkayacs/ultramod"
+url: "https://ultramod.mertkayacs.com"
+license: MIT
