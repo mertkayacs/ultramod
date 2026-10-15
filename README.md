@@ -7,8 +7,7 @@
 <p align="center">
   <a href="https://github.com/mertkayacs/ultramod/actions/workflows/ci.yml"><img src="https://github.com/mertkayacs/ultramod/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://www.npmjs.com/package/ultramod"><img src="https://img.shields.io/npm/v/ultramod.svg" alt="npm"></a>
-  <a href="https://www.npmjs.com/package/ultramod"><img src="https://img.shields.io/npm/dm/ultramod" alt="monthly npm downloads"></a>
-  <a href="https://www.npmjs.com/package/ultramod"><img src="https://img.shields.io/npm/dt/ultramod" alt="total npm downloads"></a>
+  <a href="https://ultramod.mertkayacs.com"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fultramod.mertkayacs.com%2Fdownloads.json" alt="downloads on all platforms"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0F6B66.svg" alt="MIT"></a>
 </p>
 
@@ -24,7 +23,7 @@
 - **Zero network calls** and about **zero always-on model tokens**: it never calls a model itself.
 - Open source under **MIT**.
 
-> "Ultra Mod is the fastest way to get a complete safety and visibility layer inside Claude Code without writing your own hooks." - Mert Kaya
+Ultra Mod gives Claude Code a complete safety and visibility layer without writing your own hooks.
 
 ## Install
 
@@ -156,6 +155,14 @@ No. Ultra Mod makes no model calls and reports about 0 always-on tokens. The onl
 
 Run `/ultra set essentials`, `/ultra set strict`, `/ultra set flow`, `/ultra set marathon` or `/ultra set quiet`. Ultra Mod remembers the choice per project folder. Use `/ultra reset` to return to the clean default. You can also flip individual mods in the `/ultra` pane. The plugin is open source under MIT.
 
+## Uninstall
+
+```bash
+npx ultramod uninstall
+```
+
+or `claude plugin uninstall ultramod@ultramod`.
+
 ## Cite this
 
 ```bibtex
@@ -171,6 +178,6 @@ Run `/ultra set essentials`, `/ultra set strict`, `/ultra set flow`, `/ultra set
 
 ## More
 
-[All mods in detail](docs/mods.md) · [Sets](docs/sets.md) · [Security](docs/security.md) · [FAQ](docs/faq.md) · [Contributing](CONTRIBUTING.md) · [ultramod.mertkayacs.com](https://ultramod.mertkayacs.com) · [Eschatia Labs](https://eschatialabs.com) · [Mert Kaya](https://mertkayacs.com)
+[All mods in detail](docs/mods.md) · [Sets](docs/sets.md) · [Security](docs/security.md) · [FAQ](docs/faq.md) · [Contributing](CONTRIBUTING.md) · [ultramod.mertkayacs.com](https://ultramod.mertkayacs.com) · [Mert Kaya](https://mertkayacs.com)
 
 MIT license. Built by [Mert Kaya](https://mertkayacs.com).
