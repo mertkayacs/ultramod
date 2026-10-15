@@ -1,15 +1,18 @@
-<h1 align="center">Ultra Mod: the best all-in-one mod pack for Claude Code</h1>
-
-<p align="center"><b>Ten mods in one install: your usage limits and context HUD, a guard with undo for destructive commands, .env and secret protection, and a receipt under every answer.</b></p>
-
-[![HOL Guard](https://img.shields.io/endpoint?url=https%3A%2F%2Fhol.org%2Fapi%2Fregistry%2Fbadges%2Fplugin%3Fslug%3Dmertkayacs%252Fultramod%26metric%3Dtrust)](https://hol.org/registry/plugins/mertkayacs%2Fultramod)
+<p align="center"><img src="assets/banner.webp" alt="Ultra Mod. Free and open source under the MIT license." width="1200"></p>
 
 <p align="center">
   <a href="https://github.com/mertkayacs/ultramod/actions/workflows/ci.yml"><img src="https://github.com/mertkayacs/ultramod/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://www.npmjs.com/package/ultramod"><img src="https://img.shields.io/npm/v/ultramod.svg" alt="npm"></a>
   <a href="https://ultramod.mertkayacs.com"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fultramod.mertkayacs.com%2Fdownloads.json" alt="downloads on all platforms"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0F6B66.svg" alt="MIT"></a>
+  <img src="https://img.shields.io/badge/free%20and%20open%20source-yes-0F6B66.svg" alt="free and open source">
 </p>
+
+Ultra Mod is free and open source under the MIT license.
+
+<p align="center"><b>Ten mods in one install: your usage limits and context HUD, a guard with undo for destructive commands, .env and secret protection, and a receipt under every answer.</b></p>
+
+[![HOL Guard](https://img.shields.io/endpoint?url=https%3A%2F%2Fhol.org%2Fapi%2Fregistry%2Fbadges%2Fplugin%3Fslug%3Dmertkayacs%252Fultramod%26metric%3Dtrust)](https://hol.org/registry/plugins/mertkayacs%2Fultramod)
 
 <p align="center"><img src="https://raw.githubusercontent.com/mertkayacs/ultramod/media/trailer-hero.gif" alt="Ultra Mod in Claude Code: limits and context above the prompt, a receipt under the answer, the guard holding git reset --hard and /ultra undo bringing the work back" width="900"></p>
 
