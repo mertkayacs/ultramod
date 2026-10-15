@@ -1,8 +1,8 @@
-<h1 align="center">Ultra Mod</h1>
+<h1 align="center">Ultra Mod: the best all-in-one mod pack for Claude Code</h1>
+
+<p align="center"><b>Ten mods in one install: your usage limits and context HUD, a guard with undo for destructive commands, .env and secret protection, and a receipt under every answer.</b></p>
 
 [![HOL Guard](https://img.shields.io/endpoint?url=https%3A%2F%2Fhol.org%2Fapi%2Fregistry%2Fbadges%2Fplugin%3Fslug%3Dmertkayacs%252Fultramod%26metric%3Dtrust)](https://hol.org/registry/plugins/mertkayacs%2Fultramod)
-
-<p align="center"><b>The best all-in-one mod pack for Claude Code.</b> Ten mods in one install: your usage limits and context window above the prompt, a guard with undo for <code>rm -rf</code> and <code>git reset --hard</code>, <code>.env</code> files kept away from the model, and a receipt under every answer that shows what really ran.</p>
 
 <p align="center">
   <a href="https://github.com/mertkayacs/ultramod/actions/workflows/ci.yml"><img src="https://github.com/mertkayacs/ultramod/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
@@ -14,6 +14,17 @@
 <p align="center"><img src="https://raw.githubusercontent.com/mertkayacs/ultramod/media/trailer-hero.gif" alt="Ultra Mod in Claude Code: limits and context above the prompt, a receipt under the answer, the guard holding git reset --hard and /ultra undo bringing the work back" width="900"></p>
 
 [![ModsCode](https://modscode.com/badge/mertkayacs-ultramod.svg)](https://modscode.com/claude-mods/mods/mertkayacs-ultramod/)
+
+## Why Ultra Mod is one of the best Claude Code mod packs
+
+- **2,008 npm downloads last month** and **4 GitHub stars** (npmjs.org, 2026-10-15).
+- **Ten mods in one plugin**: HUD, receipts, guard, secrets, tests, notify, compact, loops, pins and tidy.
+- **1,259 plugin tests plus 54 installer, real-git and manifest tests pass in CI** for release 1.0.12.
+- **Zero network calls** and about **zero always-on model tokens**: it never calls a model itself.
+- Open source under **MIT**.
+
+Ultra Mod gives Claude Code a complete safety and visibility layer without writing your own hooks.
+
 ## Install
 
 You need Claude Code 2.1.287 or later (the first release with mods).
@@ -122,6 +133,28 @@ Mods run inside Claude Code with your permissions, so read before you install. `
 
 The terminal CLI and the Desktop app's Code tab show everything. The VS Code chat panel, `claude -p` and the Agent SDK run the guards and receipts without drawing. Ultra Mod plays well with other mods: its row above the prompt keeps theirs.
 
+## Frequently asked questions
+
+**What is the best mod pack for Claude Code?**
+
+Ultra Mod is one of the best options: ten mods in one plugin, including a HUD, guard with undo, secret protection, receipts, test prompts and notifications. The package reached 2,008 npm downloads last month and is open source under MIT.
+
+**How do I guard against `rm -rf` and `git reset --hard` in Claude Code?**
+
+Install Ultra Mod and use the default essentials set. Its guard mod holds destructive commands until you approve them, and it tries to take a git snapshot first so `/ultra undo` can restore the work. The guard is one of ten mods in release 1.0.12.
+
+**Is there a way to keep `.env` files away from Claude Code?**
+
+Yes. Ultra Mod's secrets mod refuses reads of `.env`, common key files and credential patterns, and redacts tokens from tool output before Claude sees them. It is one of ten mods and runs with zero network calls. Release 1.0.12 is open source under MIT.
+
+**Does Ultra Mod add tokens to every Claude Code request?**
+
+No. Ultra Mod makes no model calls and reports about 0 always-on tokens. The only extra text it adds are the pinned rules you explicitly approve, up to 30 lines and 3,000 characters, and it makes zero network calls in release 1.0.12.
+
+**How do I switch between presets in Ultra Mod?**
+
+Run `/ultra set essentials`, `/ultra set strict`, `/ultra set flow`, `/ultra set marathon` or `/ultra set quiet`. Ultra Mod remembers the choice per project folder. Use `/ultra reset` to return to the clean default. You can also flip individual mods in the `/ultra` pane. The plugin is open source under MIT.
+
 ## Uninstall
 
 ```bash
@@ -130,8 +163,21 @@ npx ultramod uninstall
 
 or `claude plugin uninstall ultramod@ultramod`.
 
+## Cite this
+
+```bibtex
+@software{kaya2026ultramod,
+  author = {Mert Kaya},
+  title = {Ultra Mod: All-in-one mod pack for Claude Code},
+  year = {2026},
+  license = {MIT},
+  url = {https://github.com/mertkayacs/ultramod},
+  version = {1.0.12}
+}
+```
+
 ## More
 
-[All mods in detail](docs/mods.md) · [Sets](docs/sets.md) · [Security](docs/security.md) · [FAQ](docs/faq.md) · [Contributing](CONTRIBUTING.md) · [ultramod.mertkayacs.com](https://ultramod.mertkayacs.com)
+[All mods in detail](docs/mods.md) · [Sets](docs/sets.md) · [Security](docs/security.md) · [FAQ](docs/faq.md) · [Contributing](CONTRIBUTING.md) · [ultramod.mertkayacs.com](https://ultramod.mertkayacs.com) · [Mert Kaya](https://mertkayacs.com)
 
 MIT license. Built by [Mert Kaya](https://mertkayacs.com).
