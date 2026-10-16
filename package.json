@@ -69,6 +69,6 @@
     "check": "npm run validate && npm test && npm run typecheck"
   },
   "devDependencies": {
-    "typescript": "5.9.3"
+    "typescript": "7.0.2"
   }
 }
