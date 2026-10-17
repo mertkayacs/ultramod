@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.13 (2026-10-17)
+
+### Fixes
+- receipts, hud: on Claude Code 2.1.302 and later, a subagent's `turn.start` no longer replaces the main turn's receipt collector or HUD timer. Engines without subagent starts keep the same behavior
+
 ## 1.0.12 (2026-10-11)
 
 ### Security
