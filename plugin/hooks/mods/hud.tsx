@@ -143,6 +143,7 @@ export function createHud(sets: SetsEngine): HudMod {
     }
   }
   const start: HudMod['start'] = async (api, e) => {
+    if ('agentId' in e && e.agentId) return
     stop()
     const now = await api.clock.now()
     await update(api, turn, () => ({ id: e.turnId, startedAt: now, now, durationMs: null, edits: 0, commands: 0 }))
