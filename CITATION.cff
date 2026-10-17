@@ -3,7 +3,7 @@ message: "If you use this software, please cite it as below."
 type: software
 title: "Ultra Mod: All-in-one mod pack for Claude Code"
 version: 1.0.13
-date-released: 2026-10-10
+date-released: 2026-10-17
 authors:
   - family-names: Kaya
     given-names: Mert

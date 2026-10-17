@@ -19,6 +19,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         engine: ['2.1.287', '2.1.292', '2.1.302']
     steps:
