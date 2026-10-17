@@ -27,7 +27,8 @@ export function checkModTypes() {
   // subagent by an optional string. Older supported engines have no field, so
   // their fallback is the same type. If either assertion fails on a current
   // engine, re-check those filters against its new turn.start contract.
-  type TurnStartAgentId = Args<'turn.start'> extends { agentId?: infer Id } ? Id : string | undefined
+  type AgentIdOf<T> = T extends { agentId?: unknown } ? T['agentId'] : string | undefined
+  type TurnStartAgentId = AgentIdOf<Args<'turn.start'>>
   const agentId: string | undefined = undefined as TurnStartAgentId
   const optionalAgentId: TurnStartAgentId = undefined
 

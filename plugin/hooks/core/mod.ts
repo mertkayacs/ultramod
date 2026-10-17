@@ -1,5 +1,5 @@
 import type { UltraApi } from './api'
-import type { Args, EventResult, Frozen, PromptComposeSection, RenderInput, RenderNode, ThemeKey } from 'claude-code'
+import type { Args, EventResult, Frozen, PromptComposeSection, RenderInput, RenderNode } from 'claude-code'
 import type { UltraModSettings, UltraSet } from '../../types/index'
 
 // Every engine hook lives in register.tsx. A mod is plain data and functions
@@ -24,6 +24,7 @@ export type Step<E, R> = {
 // unchanged or with lines added for Claude.
 export type AfterTool = (result: ToolResult) => ToolResult | Promise<ToolResult>
 
+export type ContextColor = 'text' | 'warning' | 'error'
 export type BandPart = { node: RenderNode; columns: number }
 export type BandContext = {
   api: UltraApi
@@ -31,7 +32,7 @@ export type BandContext = {
   set: UltraSet
   settings: UltraModSettings
   columns: number
-  contextColor: ThemeKey
+  contextColor: ContextColor
 }
 export type PaneContext = {
   api: UltraApi

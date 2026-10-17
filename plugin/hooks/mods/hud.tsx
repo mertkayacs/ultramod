@@ -1,9 +1,9 @@
 import type { UltraApi } from '../core/api'
 import { atom, read, update } from 'claude-code'
-import type { Args, Frozen, RenderInput, RenderNode, ThemeKey, Timer } from 'claude-code'
+import type { Args, Frozen, RenderInput, RenderNode, Timer } from 'claude-code'
 import type { UltraSet } from '../../types/index'
 import { fmtCountdown, fmtDuration, fmtModel, fmtTokens, fmtUsd } from '../core/format'
-import type { UltraMod } from '../core/mod'
+import type { ContextColor, UltraMod } from '../core/mod'
 import { setLabel } from '../core/sets'
 import type { SetsEngine } from '../core/sets'
 
@@ -27,20 +27,20 @@ export async function hudRow(api: UltraApi, e: Frozen<RenderInput<'AbovePrompt' 
   const now = await api.clock.now()
   const { Text } = api.ui.resolve(e)
   const percent = usage.context.percent
-  const contextColor: ThemeKey = percent === undefined || percent < 60 ? 'text' : percent < 80 ? 'warning' : 'error'
+  const contextColor: ContextColor = percent === undefined || percent < 60 ? 'text' : percent < 80 ? 'warning' : 'error'
   const filled = percent === undefined ? 0 : Math.max(0, Math.min(10, Math.round(percent / 10)))
   const bar = `${'█'.repeat(filled)}${'░'.repeat(10 - filled)}`
   const contextText = percent === undefined ? `ctx ${bar} ?/${fmtTokens(usage.context.window)}` :
     `ctx ${bar} ${percent}% ${usage.context.tokens === undefined ? '?' : fmtTokens(usage.context.tokens)}/${fmtTokens(usage.context.window)}`
   // Nothing has answered yet, so the row starts at the limits instead of a bar of shadows.
   const hasContext = percent !== undefined || usage.context.tokens !== undefined
-  const tail: { text: string; color?: ThemeKey; dim?: boolean }[] = []
+  const tail: { text: string; color?: ContextColor; dim?: boolean }[] = []
   const limits = usage.rateLimits.map(limit => {
     const label = limit.kind === 'five_hour' ? '5h' : limit.kind === 'seven_day' ? '7d' : limit.kind
     const reset = limit.resetsAt === undefined ? NaN : Date.parse(limit.resetsAt)
     const short = `${label} ${limit.percentUsed}%`
     return { short, full: `${short}${Number.isFinite(reset) ? ` resets ${fmtCountdown(reset - now)}` : ''}`,
-      color: (limit.percentUsed < 75 ? 'text' : limit.percentUsed < 90 ? 'warning' : 'error') as ThemeKey }
+      color: (limit.percentUsed < 75 ? 'text' : limit.percentUsed < 90 ? 'warning' : 'error') as ContextColor }
   })
   if (set.mods.hud.mode !== 'compact') {
     if (held.id && held.startedAt !== null) {
@@ -58,7 +58,7 @@ export async function hudRow(api: UltraApi, e: Frozen<RenderInput<'AbovePrompt' 
     tail.push({ text: fmtModel(await api.session.model()) })
     tail.push({ text: `ultra:${setLabel(set)}`, dim: true })
   }
-  const build = (verbose: boolean): { text: string; color?: ThemeKey; dim?: boolean }[] => [
+  const build = (verbose: boolean): { text: string; color?: ContextColor; dim?: boolean }[] => [
     ...(hasContext ? [{ text: contextText, color: contextColor }] : []),
     ...limits.map(limit => ({ text: verbose ? limit.full : limit.short, color: limit.color })),
     ...tail,
