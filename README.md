@@ -139,7 +139,7 @@ or `claude plugin uninstall ultramod@ultramod`.
   year = {2026},
   license = {MIT},
   url = {https://github.com/mertkayacs/ultramod},
-  version = {1.0.12}
+  version = {1.0.13}
 }
 ```
 

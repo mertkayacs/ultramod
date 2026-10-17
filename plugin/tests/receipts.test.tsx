@@ -80,9 +80,21 @@ test('subagent turns and subagent tool calls stay out of the receipt', async ($,
   expect(stored[0]?.[0]?.commands).toHaveLength(1)
 })
 
-// A subagent raises no turn.start (the engine declarations say so), so only its
-// turn.complete can reach this mod. Even one that carries the parent's own turn
-// id must leave the parent's collection in place.
+test('a subagent turn.start leaves the parent receipt intact', async ($, on) => {
+  const { stored } = world(on)
+  await start($, 't1')
+  await $.tool.call(edit('/work/a.ts'))
+  const childStart = { turnId: 'child', text: 'child task', agentId: 'child' }
+  await $.turn.start(childStart)
+  await finish($, 'child', 'sub done', { agentId: 'child' })
+  await $.tool.call(bash('npm test'))
+  const result = await finish($, 't1', 'All tests pass.')
+  expect(result.text).toBe('receipt · 1 file · 1 cmd · tests passed · 1s')
+  expect(stored).toHaveLength(1)
+})
+
+// Even a subagent turn.complete that carries the parent's own turn id must
+// leave the parent's collection in place.
 test('a subagent turn.complete never takes the parent receipt', async ($, on) => {
   const { stored } = world(on)
   await start($, 't1')

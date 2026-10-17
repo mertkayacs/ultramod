@@ -18,6 +18,10 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: ['2.1.287', '2.1.292', '2.1.302']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -25,7 +29,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm i -g @anthropic-ai/claude-code@2.1.292
+      - run: npm i -g @anthropic-ai/claude-code@${{ matrix.engine }}
       - run: npm run validate
       - run: claude plugin test ./plugin
       - run: npm run typecheck

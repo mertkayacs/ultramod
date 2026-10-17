@@ -23,11 +23,19 @@ export function checkModTypes() {
     { id: 'tidy', check: { run: (_api, _e, next: () => void) => { next(); return null } } },
   ]
 
-  // turn.start carries no agentId (a subagent's run raises no turn.start), so
-  // the receipts step needs no subagent filter there; an engine that adds one
-  // turns this expectation red.
-  // @ts-expect-error turn.start has no agentId.
-  type SubagentTurnStart = Args<'turn.start'>['agentId']
+  // The receipts and HUD main-loop filters rely on turn.start identifying a
+  // subagent by an optional string. Older supported engines have no field, so
+  // their fallback is the same type. If an assertion fails on a current
+  // engine, re-check those filters against its new turn.start contract. An
+  // engine that drops the field also takes the fallback, so a removal goes
+  // unnoticed here.
+  type AgentIdOf<T> = T extends { agentId?: unknown } ? T['agentId'] : string | undefined
+  type TurnStartAgentId = AgentIdOf<Args<'turn.start'>>
+  const agentId: string | undefined = undefined as TurnStartAgentId
+  const optionalAgentId: TurnStartAgentId = undefined
+  const stringAgentId: TurnStartAgentId = 'agent'
+  // @ts-expect-error agentId is a string, never a number.
+  const numberAgentId: TurnStartAgentId = 0
 
-  return { good, bad }
+  return { good, bad, agentId, optionalAgentId, stringAgentId, numberAgentId }
 }

@@ -39,6 +39,7 @@ export const receipts: UltraMod = {
     run: () => { current = null },
   },
   turnStart: {
+    when: e => !('agentId' in e && e.agentId),
     run: async (api, e) => {
       current = { turnId: e.turnId, tools: 0, files: new Set(), commands: [], subagents: 0, sequence: 0, lastEdit: 0, startCost: null }
       current.startCost = await costNow(api)

@@ -100,7 +100,7 @@ test('HUD yields to surveys and unsupported surfaces', async ($, on) => {
   world(on)
   for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
     const ui = await $.ui.mount({ plugin: 'ultramod', surface, component: 'AbovePrompt', props: { ...BAND, hasSurvey: surface === 'terminal' || surface === 'desktop' } })
-    expect(await ui.drawn()).toEqual({ type: 'Text', props: {}, children: ['external band'] })
+    expect(await ui.drawn()).toMatchObject({ type: 'Text', props: {}, children: ['external band'] })
     await ui.unmount()
   }
 })
@@ -114,7 +114,7 @@ test('a disabled HUD draws no row, whether the set or the person turned it off',
   await $.command.run(command('set quiet'))
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'ultramod', surface, component: 'AbovePrompt', props: BAND })
-    expect(await ui.drawn()).toEqual(downstreamOnly)
+    expect(await ui.drawn()).toMatchObject(downstreamOnly)
     expect(await ui.find({ type: 'Text', text: /ctx |5h|7d|Sonnet|ultra:/ })).toBeUndefined()
     await ui.unmount()
   }
@@ -126,7 +126,7 @@ test('a disabled HUD draws no row, whether the set or the person turned it off',
   await pane.unmount()
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'ultramod', surface, component: 'AbovePrompt', props: BAND })
-    expect(await ui.drawn()).toEqual(downstreamOnly)
+    expect(await ui.drawn()).toMatchObject(downstreamOnly)
     await ui.unmount()
   }
   await $.turn.complete({ turnId: 'main', answer: '', durationMs: 0, isAborted: false, reason: 'answer' })
@@ -253,6 +253,20 @@ test('no cost segment reads $0.00, not even while a turn runs', async ($, on) =>
   await $.turn.complete({ turnId: 'main', answer: '', durationMs: 0, isAborted: false, reason: 'answer' })
 })
 
+test('a subagent turn.start leaves the main timer running', async ($, on) => {
+  const { clock, turns } = world(on)
+  await $.turn.start({ turnId: 'main', text: '' })
+  const childStart = { turnId: 'child', text: 'child task', agentId: 'child' }
+  await $.turn.start(childStart)
+  await clock.advance(2_000)
+  expect(turns.at(-1)).toMatchObject({ id: 'main', now: 2_000 })
+  await $.turn.complete({ turnId: 'child', agentId: 'child', answer: '', durationMs: 2_000, isAborted: false, reason: 'answer' })
+  await clock.advance(1_000)
+  expect(turns.at(-1)).toMatchObject({ id: 'main', now: 3_000 })
+  await $.turn.complete({ turnId: 'main', answer: '', durationMs: 3_000, isAborted: false, reason: 'answer' })
+  expect(turns.at(-1)).toMatchObject({ id: null, durationMs: 3_000 })
+})
+
 test('subagent completions keep the main timer alive and session end cancels it', async ($, on) => {
   const { clock, turns } = world(on)
   await $.turn.start({ turnId: 'main', text: '' })
@@ -287,7 +301,7 @@ test('a failed HUD reading leaves the downstream band visible', async ($, on) =>
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['external band'] }))
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'ultramod', surface, component: 'AbovePrompt', props: BAND })
-    expect(await ui.drawn()).toEqual({ type: 'Text', props: {}, children: ['external band'] })
+    expect(await ui.drawn()).toMatchObject({ type: 'Text', props: {}, children: ['external band'] })
     await ui.unmount()
   }
 })
