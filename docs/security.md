@@ -72,7 +72,7 @@ The core outside the mods also calls `$.store.get`/`$.store.set` (the per-projec
 
 ## Network requests
 
-**None.** No mod makes network requests. The validator confirms `env writes: nothing` and no `$` call performs network I/O.
+**None.** No mod makes network requests. `plugin/hooks` imports only `claude-code` and its own files, and contains no `fetch` call and no URL.
 
 ## Fail modes
 

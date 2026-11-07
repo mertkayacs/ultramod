@@ -28,7 +28,7 @@ This policy covers the Ultra Mod plugin (`plugin/`) and the npm installer (`bin/
 
 ## Verified facts
 
-- Zero network calls (validator confirms `env writes: nothing`)
+- Zero network calls (`plugin/hooks` imports only `claude-code` and its own files, and contains no `fetch` call and no URL)
 - No telemetry
 - No runtime dependencies
 - Guards fail closed (`.catch` returns `{ deny }`)
